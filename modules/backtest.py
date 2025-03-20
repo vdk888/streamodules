@@ -48,6 +48,17 @@ def run_backtest(symbol: str,
     
     # Initialize portfolio DataFrame
     portfolio = signals_df.copy()
+    
+    # Make sure 'close' column exists in portfolio
+    if 'close' not in portfolio.columns:
+        # Add close price from original data to portfolio DataFrame
+        if 'close' in data.columns:
+            common_dates = portfolio.index.intersection(data.index)
+            portfolio.loc[common_dates, 'close'] = data.loc[common_dates, 'close']
+        else:
+            st.error("Error: Price data does not contain 'close' column")
+            return None
+    
     portfolio['position'] = 0.0  # Number of shares/units held
     portfolio['cash'] = 100000.0  # Initial cash
     portfolio['position_value'] = 0.0  # Value of position
