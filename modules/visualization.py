@@ -34,6 +34,15 @@ def create_price_chart(price_data: pd.DataFrame,
     """
     # Calculate how many rows we need for our subplot grid
     rows = 1  # Price chart always shown
+    
+    # Add rows for composite indicators if available
+    has_daily_composite = daily_composite is not None and 'daily_composite' in daily_composite.columns
+    has_weekly_composite = weekly_composite is not None and 'weekly_composite' in weekly_composite.columns
+    
+    if has_daily_composite:
+        rows += 1
+    if has_weekly_composite:
+        rows += 1
     if show_macd:
         rows += 1
     if show_rsi:
@@ -44,9 +53,13 @@ def create_price_chart(price_data: pd.DataFrame,
         rows += 1
         
     # Create subplots with appropriate row heights
-    row_heights = [0.6]  # First row is the price chart (60% of height)
-    height_per_indicator = 0.4 / (rows - 1) if rows > 1 else 0.4  # Remaining rows share 40% of height equally
-    for _ in range(rows - 1):
+    row_heights = [0.4]  # First row is the price chart (40% of height)
+    
+    # Adjust height per indicator row
+    total_indicator_rows = rows - 1
+    height_per_indicator = 0.6 / total_indicator_rows if total_indicator_rows > 0 else 0.6
+    
+    for _ in range(total_indicator_rows):
         row_heights.append(height_per_indicator)
         
     # Create figure
@@ -62,47 +75,6 @@ def create_price_chart(price_data: pd.DataFrame,
         close=price_data['close'],
         name="Price"
     ), row=1, col=1)
-    
-    # Add daily and weekly composite bands if available
-    if daily_composite is not None and 'daily_composite' in daily_composite.columns:
-        # Add daily composite line
-        fig.add_trace(go.Scatter(
-            x=daily_composite.index,
-            y=daily_composite['daily_composite'],
-            mode='lines',
-            line=dict(color='blue', width=1.5),
-            name="Daily Composite"
-        ), row=1, col=1)
-        
-        # Add upper threshold
-        fig.add_trace(go.Scatter(
-            x=daily_composite.index,
-            y=daily_composite['upper_threshold'],
-            mode='lines',
-            line=dict(color='green', width=1, dash='dot'),
-            name="Upper Threshold",
-            opacity=0.7
-        ), row=1, col=1)
-        
-        # Add lower threshold
-        fig.add_trace(go.Scatter(
-            x=daily_composite.index,
-            y=daily_composite['lower_threshold'],
-            mode='lines',
-            line=dict(color='red', width=1, dash='dot'),
-            name="Lower Threshold",
-            opacity=0.7
-        ), row=1, col=1)
-    
-    if weekly_composite is not None and 'weekly_composite' in weekly_composite.columns:
-        # Add weekly composite line
-        fig.add_trace(go.Scatter(
-            x=weekly_composite.index,
-            y=weekly_composite['weekly_composite'],
-            mode='lines',
-            line=dict(color='purple', width=2),
-            name="Weekly Composite"
-        ), row=1, col=1)
     
     # Add buy/sell signals if available
     if signals_df is not None and show_signals:
@@ -148,23 +120,97 @@ def create_price_chart(price_data: pd.DataFrame,
             yaxis="y2"
         ), row=1, col=1)
         
-        # Add a secondary y-axis for portfolio value
+        # Update layout to include the secondary y-axis
         fig.update_layout(
             yaxis2=dict(
-                title="Portfolio Value ($)",
+                title="Portfolio Value",
+                titlefont=dict(color="black"),
+                tickfont=dict(color="black"),
+                anchor="x",
                 overlaying="y",
-                side="right",
-                showgrid=False
+                side="right"
             )
         )
     
     # Current row counter
     current_row = 2
     
+    # Add Daily Composite indicator if available
+    if has_daily_composite and current_row <= rows:
+        # Add daily composite line
+        fig.add_trace(go.Scatter(
+            x=daily_composite.index,
+            y=daily_composite['daily_composite'],
+            mode='lines',
+            line=dict(color='blue', width=1.5),
+            name="Daily Composite"
+        ), row=current_row, col=1)
+        
+        # Add upper threshold
+        fig.add_trace(go.Scatter(
+            x=daily_composite.index,
+            y=daily_composite['upper_threshold'],
+            mode='lines',
+            line=dict(color='green', width=1, dash='dot'),
+            name="Upper Threshold",
+            opacity=0.7
+        ), row=current_row, col=1)
+        
+        # Add lower threshold
+        fig.add_trace(go.Scatter(
+            x=daily_composite.index,
+            y=daily_composite['lower_threshold'],
+            mode='lines',
+            line=dict(color='red', width=1, dash='dot'),
+            name="Lower Threshold",
+            opacity=0.7
+        ), row=current_row, col=1)
+        
+        # Add title for the subplot
+        fig.update_yaxes(title_text="Daily Composite", row=current_row, col=1)
+        current_row += 1
+    
+    # Add Weekly Composite indicator if available
+    if has_weekly_composite and current_row <= rows:
+        # Add weekly composite line
+        fig.add_trace(go.Scatter(
+            x=weekly_composite.index,
+            y=weekly_composite['weekly_composite'],
+            mode='lines',
+            line=dict(color='purple', width=1.5),
+            name="Weekly Composite"
+        ), row=current_row, col=1)
+        
+        # Add upper threshold if available
+        if 'upper_threshold' in weekly_composite.columns:
+            fig.add_trace(go.Scatter(
+                x=weekly_composite.index,
+                y=weekly_composite['upper_threshold'],
+                mode='lines',
+                line=dict(color='green', width=1, dash='dot'),
+                name="Upper Threshold (Weekly)",
+                opacity=0.7
+            ), row=current_row, col=1)
+        
+        # Add lower threshold if available
+        if 'lower_threshold' in weekly_composite.columns:
+            fig.add_trace(go.Scatter(
+                x=weekly_composite.index,
+                y=weekly_composite['lower_threshold'],
+                mode='lines',
+                line=dict(color='red', width=1, dash='dot'),
+                name="Lower Threshold (Weekly)",
+                opacity=0.7
+            ), row=current_row, col=1)
+        
+        # Add title for the subplot
+        fig.update_yaxes(title_text="Weekly Composite", row=current_row, col=1)
+        current_row += 1
+    
     # Add MACD indicator if enabled
-    if show_macd and current_row <= rows:
+    if show_macd and current_row <= rows and signals_df is not None:
         # Ensure we have the necessary columns
-        if signals_df is not None and 'macd' in signals_df.columns:
+        if 'macd' in signals_df.columns:
             # Add MACD line
             fig.add_trace(go.Scatter(
                 x=signals_df.index,
@@ -201,9 +247,9 @@ def create_price_chart(price_data: pd.DataFrame,
             current_row += 1
     
     # Add RSI indicator if enabled
-    if show_rsi and current_row <= rows:
+    if show_rsi and current_row <= rows and signals_df is not None:
         # Ensure we have the necessary columns
-        if signals_df is not None and 'rsi' in signals_df.columns:
+        if 'rsi' in signals_df.columns:
             # Add RSI line
             fig.add_trace(go.Scatter(
                 x=signals_df.index,
@@ -241,9 +287,9 @@ def create_price_chart(price_data: pd.DataFrame,
             current_row += 1
     
     # Add Stochastic indicator if enabled
-    if show_stochastic and current_row <= rows:
+    if show_stochastic and current_row <= rows and signals_df is not None:
         # Ensure we have the necessary columns
-        if signals_df is not None and 'stoch_k' in signals_df.columns:
+        if 'stoch_k' in signals_df.columns:
             # Add Stochastic %K line
             fig.add_trace(go.Scatter(
                 x=signals_df.index,
@@ -291,9 +337,9 @@ def create_price_chart(price_data: pd.DataFrame,
             current_row += 1
     
     # Add Fractal Complexity indicator if enabled
-    if show_fractal and current_row <= rows:
+    if show_fractal and current_row <= rows and signals_df is not None:
         # Ensure we have the necessary columns
-        if signals_df is not None and 'fractal' in signals_df.columns:
+        if 'fractal' in signals_df.columns:
             # Add Fractal line
             fig.add_trace(go.Scatter(
                 x=signals_df.index,
@@ -319,11 +365,12 @@ def create_price_chart(price_data: pd.DataFrame,
             fig.update_yaxes(title_text="Fractal Complexity", row=current_row, col=1)
     
     # Update layout
+    symbol_name = price_data.iloc[-1]['symbol'] if 'symbol' in price_data.columns else ''
     fig.update_layout(
-        title=f"{price_data.iloc[-1]['symbol'] if 'symbol' in price_data.columns else ''} Price Chart with Indicators",
+        title=f"{symbol_name} Price Chart with Indicators",
         xaxis_title="Date",
         yaxis_title="Price",
-        height=rows * 250,  # Increased height per row
+        height=rows * 200,  # Height per row
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -356,21 +403,20 @@ def create_performance_ranking_chart(performance_df: pd.DataFrame) -> go.Figure:
     if performance_df is None or performance_df.empty:
         return None
     
-    # Sort by performance
-    sorted_df = performance_df.sort_values(by='performance', ascending=False)
+    # Sort by performance (descending)
+    df_sorted = performance_df.sort_values('performance', ascending=False)
     
-    # Create colors based on performance (green for positive, red for negative)
-    colors = ['green' if perf >= 0 else 'red' for perf in sorted_df['performance']]
+    # Create bar colors based on performance (green for positive, red for negative)
+    colors = ['green' if val >= 0 else 'red' for val in df_sorted['performance']]
     
-    # Create figure
+    # Create the bar chart
     fig = go.Figure()
     
-    # Add bars for performance
     fig.add_trace(go.Bar(
-        x=sorted_df.index,
-        y=sorted_df['performance'] * 100,  # Convert to percentage
+        x=df_sorted.index,
+        y=df_sorted['performance'] * 100,  # Convert to percentage
         marker_color=colors,
-        text=[f"{perf:.2f}%" for perf in sorted_df['performance'] * 100],
+        text=[f"{val:.2f}%" for val in df_sorted['performance'] * 100],
         textposition='auto',
         name="Performance"
     ))
@@ -378,10 +424,10 @@ def create_performance_ranking_chart(performance_df: pd.DataFrame) -> go.Figure:
     # Update layout
     fig.update_layout(
         title="Asset Performance Ranking",
-        xaxis_title="Symbol",
+        xaxis_title="Asset",
         yaxis_title="Performance (%)",
         height=400,
-        template="plotly_white"
+        margin=dict(t=30, l=50, r=50, b=50)
     )
     
     return fig
@@ -399,65 +445,39 @@ def create_portfolio_performance_chart(portfolio_df: pd.DataFrame) -> go.Figure:
     if portfolio_df is None or portfolio_df.empty:
         return None
     
-    # Create figure with secondary y-axis
+    # Create the figure with secondary y-axis
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # Add portfolio value trace
+    # Add portfolio value
     fig.add_trace(
         go.Scatter(
             x=portfolio_df.index,
             y=portfolio_df['portfolio_value'],
             mode='lines',
-            name="Portfolio Value",
-            line=dict(color='blue', width=2)
+            line=dict(color='blue', width=2),
+            name="Portfolio Value"
         ),
         secondary_y=False
     )
     
-    # Add drawdown trace on secondary axis
-    if 'drawdown' in portfolio_df.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=portfolio_df.index,
-                y=portfolio_df['drawdown'] * 100,  # Convert to percentage
-                mode='lines',
-                name="Drawdown",
-                line=dict(color='red', width=1.5)
-            ),
-            secondary_y=True
-        )
-    
-    # Add portfolio cash trace
-    if 'cash' in portfolio_df.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=portfolio_df.index,
-                y=portfolio_df['cash'],
-                mode='lines',
-                name="Cash",
-                line=dict(color='green', width=1.5, dash='dot')
-            ),
-            secondary_y=False
-        )
-    
-    # Add position value trace
-    if 'position_value' in portfolio_df.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=portfolio_df.index,
-                y=portfolio_df['position_value'],
-                mode='lines',
-                name="Position Value",
-                line=dict(color='orange', width=1.5, dash='dot')
-            ),
-            secondary_y=False
-        )
+    # Add drawdown
+    fig.add_trace(
+        go.Scatter(
+            x=portfolio_df.index,
+            y=portfolio_df['drawdown'] * 100,  # Convert to percentage
+            mode='lines',
+            line=dict(color='red', width=1.5),
+            name="Drawdown (%)",
+            fill='tozeroy',
+            fillcolor='rgba(255, 0, 0, 0.1)'
+        ),
+        secondary_y=True
+    )
     
     # Update layout
     fig.update_layout(
-        title="Portfolio Performance Over Time",
+        title="Portfolio Performance",
         xaxis_title="Date",
-        height=400,
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -465,11 +485,12 @@ def create_portfolio_performance_chart(portfolio_df: pd.DataFrame) -> go.Figure:
             xanchor="right",
             x=1
         ),
-        template="plotly_white"
+        height=400,
+        margin=dict(t=30, l=50, r=50, b=30)
     )
     
-    # Set y-axes titles
-    fig.update_yaxes(title_text="Value ($)", secondary_y=False)
+    # Update y-axes titles
+    fig.update_yaxes(title_text="Portfolio Value", secondary_y=False)
     fig.update_yaxes(title_text="Drawdown (%)", secondary_y=True)
     
     return fig
