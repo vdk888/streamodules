@@ -100,8 +100,8 @@ def update_charts():
         st.warning("Could not generate signals. Please try a different timeframe or lookback period.")
         return
     
-    # Create price chart
-    fig1 = make_subplots(rows=1, cols=1, shared_xaxes=True)
+    # Create price chart with a secondary y-axis for indicators
+    fig1 = make_subplots(rows=1, cols=1, shared_xaxes=True, specs=[[{"secondary_y": True}]])
     
     # Add candlestick chart
     fig1.add_trace(
@@ -112,7 +112,8 @@ def update_charts():
             low=df['low'], 
             close=df['close'],
             name="Price"
-        )
+        ),
+        secondary_y=False
     )
     
     # Add buy signals if available
@@ -151,8 +152,9 @@ def update_charts():
                 y=signals_df['daily_composite'],
                 mode='lines',
                 name="Daily Composite",
-                line=dict(color='royalblue', width=1)
-            )
+                line=dict(color='royalblue', width=2.5)
+            ),
+            secondary_y=True
         )
         
         # Daily threshold lines
@@ -163,8 +165,9 @@ def update_charts():
                     y=signals_df['daily_up_lim'],
                     mode='lines',
                     name="Daily Upper Threshold",
-                    line=dict(color='green', width=1, dash='dash')
-                )
+                    line=dict(color='green', width=1.5, dash='dash')
+                ),
+                secondary_y=True
             )
         
         if 'daily_down_lim' in signals_df.columns:
@@ -174,8 +177,9 @@ def update_charts():
                     y=signals_df['daily_down_lim'],
                     mode='lines',
                     name="Daily Lower Threshold",
-                    line=dict(color='red', width=1, dash='dash')
-                )
+                    line=dict(color='red', width=1.5, dash='dash')
+                ),
+                secondary_y=True
             )
     
     # Weekly composite line
@@ -186,8 +190,9 @@ def update_charts():
                 y=signals_df['weekly_composite'],
                 mode='lines',
                 name="Weekly Composite",
-                line=dict(color='purple', width=2)
-            )
+                line=dict(color='purple', width=2.5)
+            ),
+            secondary_y=True
         )
         
         # Weekly threshold lines
@@ -198,8 +203,9 @@ def update_charts():
                     y=signals_df['weekly_up_lim'],
                     mode='lines',
                     name="Weekly Upper Threshold",
-                    line=dict(color='darkgreen', width=1, dash='dot')
-                )
+                    line=dict(color='darkgreen', width=1.5, dash='dot')
+                ),
+                secondary_y=True
             )
         
         if 'weekly_down_lim' in signals_df.columns:
@@ -209,11 +215,22 @@ def update_charts():
                     y=signals_df['weekly_down_lim'],
                     mode='lines',
                     name="Weekly Lower Threshold",
-                    line=dict(color='darkred', width=1, dash='dot')
-                )
+                    line=dict(color='darkred', width=1.5, dash='dot')
+                ),
+                secondary_y=True
             )
     
-    # Update layout
+    # Set y-axis titles
+    fig1.update_yaxes(title_text="Price (USD)", secondary_y=False)
+    fig1.update_yaxes(title_text="Indicator Value", secondary_y=True)
+    
+    # Calculate dynamic y-axis range to better fit the price data
+    price_min = df['low'].min()
+    price_max = df['high'].max()
+    price_range = price_max - price_min
+    price_padding = price_range * 0.05  # Add 5% padding
+    
+    # Update layout with better y-axis scaling
     fig1.update_layout(
         title="BTC-USD Price with Signal Indicators",
         height=600,
@@ -225,11 +242,15 @@ def update_charts():
             xanchor="right",
             x=1
         ),
-        xaxis_rangeslider_visible=False
+        xaxis_rangeslider_visible=False,
+        yaxis=dict(
+            range=[price_min - price_padding, price_max + price_padding],
+            autorange=False
+        )
     )
     
-    # Display the price chart
-    price_chart_placeholder.plotly_chart(fig1, use_container_width=True)
+    # Display the price chart with a unique key to avoid duplicate ID error
+    price_chart_placeholder.plotly_chart(fig1, use_container_width=True, key="price_chart")
     
     # Create technical indicators chart
     fig2 = make_subplots(
@@ -343,8 +364,8 @@ def update_charts():
         showlegend=False
     )
     
-    # Display the indicators chart
-    indicators_placeholder.plotly_chart(fig2, use_container_width=True)
+    # Display the indicators chart with a unique key to avoid duplicate ID error
+    indicators_placeholder.plotly_chart(fig2, use_container_width=True, key="indicators_chart")
     
     # Display signal information
     recent_signals = pd.DataFrame()
