@@ -105,27 +105,35 @@ def create_price_chart(price_data: pd.DataFrame,
     
     # Add buy/sell signals if available
     if signals_df is not None and show_signals:
-        # Buy signals
-        buy_signals = signals_df[signals_df['signal'] == 1]
-        if not buy_signals.empty:
-            fig.add_trace(go.Scatter(
-                x=buy_signals.index,
-                y=buy_signals['close'] * 0.99,  # Place markers slightly below the close price
-                mode='markers',
-                marker=dict(color='green', size=10, symbol='triangle-up'),
-                name="Buy Signal"
-            ), row=1, col=1)
-        
-        # Sell signals
-        sell_signals = signals_df[signals_df['signal'] == -1]
-        if not sell_signals.empty:
-            fig.add_trace(go.Scatter(
-                x=sell_signals.index,
-                y=sell_signals['close'] * 1.01,  # Place markers slightly above the close price
-                mode='markers',
-                marker=dict(color='red', size=10, symbol='triangle-down'),
-                name="Sell Signal"
-            ), row=1, col=1)
+        # Make sure signals_df has the close column
+        if 'close' not in signals_df.columns and 'close' in price_data.columns:
+            # Add close price from price_data to signals_df
+            common_dates = signals_df.index.intersection(price_data.index)
+            signals_df = signals_df.copy()  # Avoid modifying the original DataFrame
+            signals_df.loc[common_dates, 'close'] = price_data.loc[common_dates, 'close']
+            
+        # Buy signals (only if 'close' is now available)
+        if 'close' in signals_df.columns:
+            buy_signals = signals_df[signals_df['signal'] == 1]
+            if not buy_signals.empty:
+                fig.add_trace(go.Scatter(
+                    x=buy_signals.index,
+                    y=buy_signals['close'] * 0.99,  # Place markers slightly below the close price
+                    mode='markers',
+                    marker=dict(color='green', size=10, symbol='triangle-up'),
+                    name="Buy Signal"
+                ), row=1, col=1)
+            
+            # Sell signals
+            sell_signals = signals_df[signals_df['signal'] == -1]
+            if not sell_signals.empty:
+                fig.add_trace(go.Scatter(
+                    x=sell_signals.index,
+                    y=sell_signals['close'] * 1.01,  # Place markers slightly above the close price
+                    mode='markers',
+                    marker=dict(color='red', size=10, symbol='triangle-down'),
+                    name="Sell Signal"
+                ), row=1, col=1)
     
     # Add portfolio equity curve if available
     if portfolio_df is not None:
