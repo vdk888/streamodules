@@ -200,15 +200,27 @@ def update_charts():
             row=1, col=1
         )
         
-        # Daily threshold lines
+        # Daily threshold lines (1 STD)
         if 'daily_up_lim' in signals_df.columns:
             fig2.add_trace(
                 go.Scatter(
                     x=signals_df.index,
                     y=signals_df['daily_up_lim'],
                     mode='lines',
-                    name="Daily Upper Threshold",
+                    name="Daily Upper 1σ",
                     line=dict(color='green', width=1.5, dash='dash')
+                ),
+                row=1, col=1
+            )
+            
+            # Daily 2 STD upper
+            fig2.add_trace(
+                go.Scatter(
+                    x=signals_df.index,
+                    y=signals_df['daily_up_lim_2std'],
+                    mode='lines',
+                    name="Daily Upper 2σ",
+                    line=dict(color='darkgreen', width=1, dash='dot')
                 ),
                 row=1, col=1
             )
@@ -219,8 +231,20 @@ def update_charts():
                     x=signals_df.index,
                     y=signals_df['daily_down_lim'],
                     mode='lines',
-                    name="Daily Lower Threshold",
+                    name="Daily Lower 1σ",
                     line=dict(color='red', width=1.5, dash='dash')
+                ),
+                row=1, col=1
+            )
+            
+            # Daily 2 STD lower
+            fig2.add_trace(
+                go.Scatter(
+                    x=signals_df.index,
+                    y=signals_df['daily_down_lim_2std'],
+                    mode='lines',
+                    name="Daily Lower 2σ",
+                    line=dict(color='darkred', width=1, dash='dot')
                 ),
                 row=1, col=1
             )
@@ -250,15 +274,27 @@ def update_charts():
             row=2, col=1
         )
         
-        # Weekly threshold lines
+        # Weekly threshold lines (1 STD)
         if 'weekly_up_lim' in signals_df.columns:
             fig2.add_trace(
                 go.Scatter(
                     x=signals_df.index,
                     y=signals_df['weekly_up_lim'],
                     mode='lines',
-                    name="Weekly Upper Threshold",
+                    name="Weekly Upper 1σ",
                     line=dict(color='darkgreen', width=1.5, dash='dot')
+                ),
+                row=2, col=1
+            )
+            
+            # Weekly 2 STD upper
+            fig2.add_trace(
+                go.Scatter(
+                    x=signals_df.index,
+                    y=signals_df['weekly_up_lim_2std'],
+                    mode='lines',
+                    name="Weekly Upper 2σ",
+                    line=dict(color='green', width=1, dash='dashdot')
                 ),
                 row=2, col=1
             )
@@ -269,8 +305,20 @@ def update_charts():
                     x=signals_df.index,
                     y=signals_df['weekly_down_lim'],
                     mode='lines',
-                    name="Weekly Lower Threshold",
+                    name="Weekly Lower 1σ",
                     line=dict(color='darkred', width=1.5, dash='dot')
+                ),
+                row=2, col=1
+            )
+            
+            # Weekly 2 STD lower
+            fig2.add_trace(
+                go.Scatter(
+                    x=signals_df.index,
+                    y=signals_df['weekly_down_lim_2std'],
+                    mode='lines',
+                    name="Weekly Lower 2σ",
+                    line=dict(color='red', width=1, dash='dashdot')
                 ),
                 row=2, col=1
             )
