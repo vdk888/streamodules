@@ -219,7 +219,7 @@ def load_best_params(symbol):
                         return None
                 except Exception as e:
                     st.warning(f"Error accessing Replit Object Storage: {str(e)}. Falling back to local file.")
-                    
+
                     # Fallback to local file if needed
                     try:
                         with open(best_params_file, "r") as f:
@@ -475,10 +475,9 @@ def backtest_calculate_ranking(prices_dataset, current_time, lookback_days_param
         perf_df = pd.DataFrame.from_dict(performance_dict, 
                                         orient='index', 
                                         columns=['performance'])
-        # Sort by performance descending and calculate percentile rank
-            perf_df = perf_df.sort_values('performance', ascending=False)
+            # Sort by performance descending and calculate percentile rank
+        perf_df = perf_df.sort_values('performance', ascending=False)
         perf_df['rank'] = (perf_df['performance'].rank(ascending=False) / len(perf_df)) * 100
-
         return perf_df
     return None
 
@@ -1081,7 +1080,7 @@ def update_charts():
     try:
         params = None
         source = None
-        
+
         # Try Replit Object Storage first
         try:
             from replit.object_storage import Client
@@ -1101,12 +1100,12 @@ def update_charts():
                         source = "Local File"
             except FileNotFoundError:
                 pass
-                
+
         if params:
             st.info(f"Parameters source: {source}")
             best_params = params['best_params']
             metrics = params.get('metrics', {})
-            
+
             col1, col2 = st.columns(2)
             with col1:
                 st.write("Parameters:")
@@ -1117,7 +1116,7 @@ def update_charts():
                     "Fractal Weight": round(best_params.get('fractal_weight', 0), 2),
                     "Reactivity": round(best_params.get('reactivity', 0), 2)
                 })
-            
+
             with col2:
                 st.write("Performance Metrics:")
                 st.json({
@@ -1127,7 +1126,7 @@ def update_charts():
                 })
         else:
             st.info("No parameter data available")
-            
+
     except Exception as e:
         st.warning(f"Could not load best parameters: {str(e)}")
 
