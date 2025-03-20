@@ -16,8 +16,8 @@ sys.path.append('.')
 from utils import fetch_and_process_data, generate_signals_with_indicators
 from attached_assets.config import TRADING_SYMBOLS, TRADING_COSTS, DEFAULT_RISK_PERCENT
 from attached_assets.indicators import get_default_params
-# Instead of importing from backtest_individual directly, we'll implement 
-# our own functions that use the same logic but with corrected imports
+# Import backtest functions from backtest_individual.py
+from attached_assets.backtest_individual import run_backtest, find_best_params, calculate_performance_ranking as backtest_calculate_ranking
 try:
     from replit.object_storage import Client
     object_storage_available = True
@@ -127,8 +127,7 @@ with st.sidebar.expander("Parameter Management", expanded=True):
     # Add button to optimize parameters
     if st.button("Find Best Parameters"):
         with st.spinner("Running parameter optimization... This may take a minute..."):
-            # Use the find_best_params function from backtest_individual.py
-            from attached_assets.backtest_individual import find_best_params
+            # Use the find_best_params function imported above
             try:
                 # Define parameter grid based on current symbol
                 param_grid = {

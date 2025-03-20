@@ -3,8 +3,8 @@ import numpy as np
 import yfinance as yf
 from datetime import datetime, timedelta
 import pytz
-from indicators import generate_signals, get_default_params
-from config import TRADING_SYMBOLS, TRADING_COSTS, DEFAULT_RISK_PERCENT, DEFAULT_INTERVAL, DEFAULT_INTERVAL_WEEKLY, default_interval_yahoo, default_backtest_interval, lookback_days_param
+from attached_assets.indicators import generate_signals, get_default_params
+from attached_assets.config import TRADING_SYMBOLS, TRADING_COSTS, DEFAULT_RISK_PERCENT, DEFAULT_INTERVAL, DEFAULT_INTERVAL_WEEKLY, default_interval_yahoo, default_backtest_interval, lookback_days_param
 import matplotlib.pyplot as plt
 import io
 import matplotlib.dates as mdates
