@@ -1,0 +1,32 @@
+{
+  "BTC/USD": {
+    "best_params": {
+      "macd_weight": 0.5,
+      "rsi_weight": 0.75,
+      "stoch_weight": 0.5,
+      "fractal_weight": 0.25,
+      "reactivity": 1.0
+    },
+    "metrics": {
+      "performance": 8.32,
+      "win_rate": 68.4,
+      "max_drawdown": 5.76
+    },
+    "date": "2025-03-20"
+  },
+  "ETH/USD": {
+    "best_params": {
+      "macd_weight": 0.5,
+      "rsi_weight": 0.5,
+      "stoch_weight": 0.5,
+      "fractal_weight": 0.25,
+      "reactivity": 1.2
+    },
+    "metrics": {
+      "performance": 6.89,
+      "win_rate": 65.2,
+      "max_drawdown": 6.43
+    },
+    "date": "2025-03-20"
+  }
+}

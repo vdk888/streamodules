@@ -172,10 +172,10 @@ with st.sidebar.expander("About", expanded=False):
     *Data updates automatically based on the selected interval.*
     """)
 
-# Function to load best parameters from object storage
+# Function to load best parameters from object storage or local file
 def load_best_params(symbol):
     """
-    Load best parameters for a symbol from Replit Object Storage
+    Load best parameters for a symbol from local file and upload to Replit Object Storage
     
     Args:
         symbol: Trading symbol (e.g., 'BTC/USD')
@@ -186,17 +186,19 @@ def load_best_params(symbol):
     best_params_file = "best_params.json"
     
     try:
+        # Always try local file first
+        with open(best_params_file, "r") as f:
+            best_params_data = json.load(f)
+            st.success("Loaded parameters from local file")
+            
+        # If Replit Object Storage is available, try to upload the data
         if object_storage_available:
-            # Try to get parameters from Object Storage
-            client = Client()
-            json_content = client.download_as_text(best_params_file)
-            best_params_data = json.loads(json_content)
-            st.success("Successfully loaded parameters from Object Storage")
-        else:
-            # Try local file as fallback
-            with open(best_params_file, "r") as f:
-                best_params_data = json.load(f)
-                st.success("Loaded parameters from local file")
+            try:
+                client = Client()
+                client.upload_from_text(best_params_file, json.dumps(best_params_data, indent=4))
+                st.success("Also synced parameters to Replit Object Storage")
+            except Exception as e:
+                st.info(f"Could not sync to Replit Object Storage: {str(e)}. Using local file only.")
                 
         if symbol in best_params_data:
             params = best_params_data[symbol]['best_params']
