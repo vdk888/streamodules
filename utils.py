@@ -72,13 +72,12 @@ def fetch_and_process_data(symbol: str, timeframe: str, lookback_days: int) -> T
         logger.error(traceback.format_exc())
         return None, error_msg
 
-def generate_signals_with_indicators(data: pd.DataFrame, params: Optional[Dict] = None) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+def generate_signals_with_indicators(data: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[pd.DataFrame]]:
     """
     Generate signals and indicators for the given data.
 
     Args:
         data: DataFrame with OHLCV data
-        params: Optional parameters for signal generation, uses defaults if None
 
     Returns:
         Tuple containing signals DataFrame, daily data, and weekly data
@@ -88,54 +87,11 @@ def generate_signals_with_indicators(data: pd.DataFrame, params: Optional[Dict] 
             logger.error("No data available for signal generation")
             return None, None, None
 
-        # Use provided parameters or get defaults
-        if params is None:
-            params = get_default_params()
+        # Get default parameters
+        params = get_default_params()
 
         # Use the generate_signals function from indicators.py
         signals, daily_data, weekly_data = generate_signals(data, params)
-        
-        # Calculate technical indicators
-        from attached_assets.indicators import calculate_macd, calculate_rsi, calculate_stochastic, calculate_fractal_complexity
-        
-        # Add close price for reference
-        signals['close'] = data['close']
-        
-        # Calculate MACD
-        fast = params['macd_fast']
-        slow = params['macd_slow']
-        signal_period = params['macd_signal']
-        
-        # Get MACD histogram from the indicators.py function
-        signals['macd_hist'] = calculate_macd(data, fast=fast, slow=slow, signal=signal_period)
-        
-        # Calculate MACD and Signal lines separately for the chart
-        ema_fast = data['close'].ewm(span=fast, adjust=False).mean()
-        ema_slow = data['close'].ewm(span=slow, adjust=False).mean()
-        signals['macd'] = ema_fast - ema_slow  # MACD line
-        signals['macd_signal'] = signals['macd'].ewm(span=signal_period, adjust=False).mean()  # Signal line
-        
-        # Add RSI
-        signals['rsi'] = calculate_rsi(data, period=params['rsi_period'])
-        
-        # Add Stochastic
-        stoch_k = calculate_stochastic(data, k_period=params['stochastic_k_period'], d_period=params['stochastic_d_period'])
-        signals['stoch_k'] = stoch_k
-        signals['stoch_d'] = stoch_k.rolling(params['stochastic_d_period']).mean()
-        
-        # Add Fractal Complexity
-        signals['fractal'] = calculate_fractal_complexity(data)
-        
-        # Ensure the composite indicators are included
-        if daily_data is not None and 'daily_composite' in daily_data.columns:
-            # Copy daily composite indicator to signals DataFrame
-            common_dates = signals.index.intersection(daily_data.index)
-            signals.loc[common_dates, 'daily_composite'] = daily_data.loc[common_dates, 'daily_composite']
-            
-        if weekly_data is not None and 'weekly_composite' in weekly_data.columns:
-            # Copy weekly composite indicator to signals DataFrame
-            common_dates = signals.index.intersection(weekly_data.index)
-            signals.loc[common_dates, 'weekly_composite'] = weekly_data.loc[common_dates, 'weekly_composite']
 
         return signals, daily_data, weekly_data
 
@@ -162,28 +118,14 @@ def get_indicator_values(data: pd.DataFrame) -> Dict[str, pd.Series]:
 
     indicators = {}
 
-    # Calculate MACD using the indicators.py function
-    # For MACD, we want the histogram
-    indicators['macd_hist'] = calculate_macd(data)
-    
-    # For visualization, we also want the MACD line and signal line
-    fast = 12
-    slow = 26
-    signal_period = 9
-    
-    ema_fast = data['close'].ewm(span=fast, adjust=False).mean()
-    ema_slow = data['close'].ewm(span=slow, adjust=False).mean()
-    macd_line = ema_fast - ema_slow
-    indicators['macd'] = macd_line
-    indicators['macd_signal'] = macd_line.ewm(span=signal_period, adjust=False).mean()
+    # Calculate MACD
+    indicators['macd'] = calculate_macd(data)
 
     # Calculate RSI
     indicators['rsi'] = calculate_rsi(data)
 
     # Calculate Stochastic
-    stoch_k = calculate_stochastic(data)
-    indicators['stoch_k'] = stoch_k
-    indicators['stoch_d'] = stoch_k.rolling(3).mean()  # 3 is default d_period
+    indicators['stochastic'] = calculate_stochastic(data)
 
     # Calculate Fractal Complexity
     indicators['fractal'] = calculate_fractal_complexity(data)

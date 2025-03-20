@@ -1,37 +1,18 @@
 {
   "BTC/USD": {
     "best_params": {
-      "percent_increase_buy": 0.02,
-      "percent_decrease_sell": 0.02,
-      "sell_down_lim": 2.0,
-      "sell_rolling_std": 20,
-      "buy_up_lim": -2.0,
-      "buy_rolling_std": 20,
-      "rsi_period": 14,
-      "stochastic_k_period": 14,
-      "stochastic_d_period": 3,
-      "macd_fast": 12,
-      "macd_slow": 26,
-      "macd_signal": 9,
-      "fractal_window": 150,
-      "fractal_lags": [
-        5,
-        10,
-        20
-      ],
-      "reactivity": 0.8,
-      "weights": {
-        "weekly_macd_weight": 0.25,
-        "weekly_rsi_weight": 0.25,
-        "weekly_stoch_weight": 0.25,
-        "weekly_complexity_weight": 0.25,
-        "macd_weight": 0.25,
-        "rsi_weight": 0.25,
-        "stoch_weight": 0.25,
-        "complexity_weight": 0.25
-      }
+      "macd_weight": 0.5,
+      "rsi_weight": 0.75,
+      "stoch_weight": 0.5,
+      "fractal_weight": 0.25,
+      "reactivity": 1.0
     },
-    "timestamp": "2025-03-20 20:00:14.303841"
+    "metrics": {
+      "performance": 8.32,
+      "win_rate": 68.4,
+      "max_drawdown": 5.76
+    },
+    "date": "2025-03-20"
   },
   "ETH/USD": {
     "best_params": {
