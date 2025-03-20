@@ -173,8 +173,8 @@ def update_charts():
         )
     )
     
-    # Display the price chart with a unique key to avoid duplicate ID error
-    price_chart_placeholder.plotly_chart(fig1, use_container_width=True, key="price_chart")
+    # Display the price chart with a timestamp-based key to avoid duplicate ID error
+    price_chart_placeholder.plotly_chart(fig1, use_container_width=True, key=f"price_chart_{int(time.time())}")
     
     # Create technical indicators chart with 6 subplots (adding daily and weekly composite)
     fig2 = make_subplots(
@@ -388,8 +388,8 @@ def update_charts():
         showlegend=False
     )
     
-    # Display the indicators chart with a unique key to avoid duplicate ID error
-    indicators_placeholder.plotly_chart(fig2, use_container_width=True, key="indicators_chart")
+    # Display the indicators chart with a timestamp-based key to avoid duplicate ID error
+    indicators_placeholder.plotly_chart(fig2, use_container_width=True, key=f"indicators_chart_{int(time.time())}")
     
     # Display signal information
     recent_signals = pd.DataFrame()
