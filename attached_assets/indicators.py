@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Union, List, Tuple
 import json
-import config
+from attached_assets import config
 
 def calculate_hurst_exponent(data: pd.Series, lags: List[int]) -> float:
     """Calculate Hurst exponent using R/S analysis"""

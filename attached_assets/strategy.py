@@ -1,12 +1,12 @@
 from typing import Dict, Optional
 import pandas as pd
-from indicators import generate_signals, get_default_params
-from fetch import get_latest_data, fetch_historical_data
+from attached_assets.indicators import generate_signals, get_default_params
+from attached_assets.fetch import get_latest_data, fetch_historical_data
 import logging
 import pytz
 import json
-import config
-from config import lookback_days_param, get_update_interval
+import attached_assets.config as config
+from attached_assets.config import lookback_days_param, get_update_interval
 
 logger = logging.getLogger(__name__)
 

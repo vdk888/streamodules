@@ -9,20 +9,21 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import Dict, Optional, List
 
-from config import (
+from attached_assets.config import (
     TRADING_SYMBOLS, param_grid, lookback_days_param, ALPACA_PAPER, get_update_interval, DEFAULT_INTERVAL
 )
-from trading import TradingExecutor
-from fetch import fetch_historical_data, get_latest_data, is_market_open
-from strategy import TradingStrategy
-from telegram_bot import TradingBot
+from attached_assets.strategy import TradingStrategy
+from attached_assets.fetch import fetch_historical_data, get_latest_data, is_market_open
+# Following imports are commented out since they're not used in this visualization-only app
+# from trading import TradingExecutor
+# from telegram_bot import TradingBot
 from alpaca.trading.client import TradingClient
 from dotenv import load_dotenv
 from telegram import Update, Bot
 from backtest_individual import find_best_params
 import io
 import matplotlib.pyplot as plt
-from indicators import get_default_params
+from attached_assets.indicators import get_default_params
 
 # Add Flask server for Replit deployment
 from flask import Flask

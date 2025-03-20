@@ -5,12 +5,14 @@ from datetime import datetime, timedelta
 import pytz
 import yfinance as yf
 
+# Note: For visualization-only app, we don't need Alpaca API credentials
 ALPACA_PAPER = False
-ALPACA_API_KEY = os.getenv('ALPACA_API_KEY')
-ALPACA_SECRET_KEY = os.getenv('ALPACA_SECRET_KEY')
+ALPACA_API_KEY = os.getenv('ALPACA_API_KEY', 'dummy_key')
+ALPACA_SECRET_KEY = os.getenv('ALPACA_SECRET_KEY', 'dummy_secret')
 
-if not ALPACA_API_KEY or not ALPACA_SECRET_KEY:
-    raise ValueError("Alpaca API credentials not found in environment variables")
+# Don't raise error for visualization-only app
+# if not ALPACA_API_KEY or not ALPACA_SECRET_KEY:
+#     raise ValueError("Alpaca API credentials not found in environment variables")
 
 # Default trading parameters
 DEFAULT_RISK_PERCENT = 0.95
