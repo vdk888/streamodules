@@ -241,37 +241,38 @@ def create_price_chart(price_data: pd.DataFrame,
     # Add MACD indicator if enabled
     if show_macd and current_row <= rows and signals_df is not None:
         # Ensure we have the necessary columns
-        if 'macd' in signals_df.columns:
+        if 'macd' in signals_df.columns and 'macd_signal' in signals_df.columns and 'macd_hist' in signals_df.columns:
+            # Create histogram colors based on values
+            colors = ['green' if val >= 0 else 'red' for val in signals_df['macd_hist']]
+            
+            # Add Histogram
+            fig.add_trace(go.Bar(
+                x=signals_df.index,
+                y=signals_df['macd_hist'],
+                marker_color=colors,
+                name="MACD Histogram",
+                showlegend=True
+            ), row=current_row, col=1)
+            
             # Add MACD line
             fig.add_trace(go.Scatter(
                 x=signals_df.index,
                 y=signals_df['macd'],
                 mode='lines',
                 line=dict(color='blue', width=1.5),
-                name="MACD"
+                name="MACD",
+                showlegend=True
             ), row=current_row, col=1)
             
             # Add Signal line
-            if 'macd_signal' in signals_df.columns:
-                fig.add_trace(go.Scatter(
-                    x=signals_df.index,
-                    y=signals_df['macd_signal'],
-                    mode='lines',
-                    line=dict(color='red', width=1.5),
-                    name="Signal"
-                ), row=current_row, col=1)
-            
-            # Add Histogram
-            if 'macd_hist' in signals_df.columns:
-                # Create histogram colors based on values
-                colors = ['green' if val >= 0 else 'red' for val in signals_df['macd_hist']]
-                
-                fig.add_trace(go.Bar(
-                    x=signals_df.index,
-                    y=signals_df['macd_hist'],
-                    marker_color=colors,
-                    name="MACD Histogram"
-                ), row=current_row, col=1)
+            fig.add_trace(go.Scatter(
+                x=signals_df.index,
+                y=signals_df['macd_signal'],
+                mode='lines',
+                line=dict(color='red', width=1.5),
+                name="Signal",
+                showlegend=True
+            ), row=current_row, col=1)
             
             # Add title for the subplot
             fig.update_yaxes(
