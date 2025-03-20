@@ -805,6 +805,48 @@ def update_charts():
             else:
                 st.info("No signals available to simulate portfolio. Try a different timeframe or symbol.")
     
+    # Add asset performance comparison
+    st.subheader("Asset Performance Comparison")
+    performance_df = calculate_performance_ranking(lookback_days=lookback_days)
+    
+    if performance_df is not None and not performance_df.empty:
+        # Create a bar chart for the performance ranking
+        fig_perf = go.Figure()
+        
+        # Sort by performance descending
+        performance_df = performance_df.sort_values('performance', ascending=False)
+        
+        # Add bars
+        fig_perf.add_trace(
+            go.Bar(
+                x=performance_df.index,
+                y=performance_df['performance'],
+                marker_color=['green' if x > 0 else 'red' for x in performance_df['performance']],
+                text=[f"{x:.2f}%" for x in performance_df['performance']],
+                textposition='outside'
+            )
+        )
+        
+        # Update layout
+        fig_perf.update_layout(
+            title="Performance Over Selected Period",
+            yaxis_title="% Change",
+            height=400,
+            margin=dict(l=0, r=0, t=40, b=0)
+        )
+        
+        # Display the performance chart
+        st.plotly_chart(fig_perf, use_container_width=True, key=f"perf_chart_{int(time.time())}")
+        
+        # Display a table with more details
+        performance_df['performance'] = performance_df['performance'].apply(lambda x: f"{x:.2f}%")
+        performance_df['rank'] = performance_df['rank'].apply(lambda x: f"{x*100:.1f}%")
+        performance_df.columns = ['Performance', 'Percentile Rank']
+        
+        st.dataframe(performance_df, use_container_width=True)
+    else:
+        st.info("Unable to calculate performance ranking. Try a different timeframe.")
+        
     # Show last update time
     st.caption(f"Last updated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
