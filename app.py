@@ -14,8 +14,10 @@ from datetime import timedelta
 sys.path.append('.')
 
 from utils import fetch_and_process_data, generate_signals_with_indicators
-from trading_config import TRADING_SYMBOLS, TRADING_COSTS, DEFAULT_RISK_PERCENT
+from attached_assets.config import TRADING_SYMBOLS, TRADING_COSTS, DEFAULT_RISK_PERCENT
 from attached_assets.indicators import get_default_params
+# Instead of importing from backtest_individual directly, we'll implement 
+# our own functions that use the same logic but with corrected imports
 try:
     from replit.object_storage import Client
     object_storage_available = True
@@ -80,6 +82,43 @@ with st.sidebar.expander("Portfolio Simulation", expanded=True):
     enable_simulation = st.checkbox("Enable Portfolio Simulation", value=True)
     initial_capital = st.number_input("Initial Capital ($)", value=100000, step=10000)
     
+    # Add button to run a backtest using the function from backtest_individual.py
+    if st.button("Run Full Backtest"):
+        with st.spinner("Running backtest simulation... This may take a minute..."):
+            try:
+                # Use the run_backtest function from backtest_individual.py
+                backtest_result = run_backtest(
+                    symbol=selected_symbol, 
+                    days=lookback_days,
+                    params=None,  # Use default params unless optimized
+                    is_simulating=True
+                )
+                
+                if backtest_result:
+                    st.success(f"Backtest complete for {selected_symbol}!")
+                    
+                    # Display key performance metrics
+                    metrics = backtest_result.get('metrics', {})
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Total Return", f"{metrics.get('total_return', 0):.2f}%")
+                    with col2:
+                        st.metric("Max Drawdown", f"{metrics.get('max_drawdown', 0):.2f}%")
+                    with col3:
+                        st.metric("Win Rate", f"{metrics.get('win_rate', 0):.2f}%")
+                    with col4:
+                        st.metric("Sharpe Ratio", f"{metrics.get('sharpe_ratio', 0):.2f}")
+                    
+                    # If there's a plot available in the result, display it
+                    plot_data = backtest_result.get('plot_data', None)
+                    if plot_data:
+                        st.plotly_chart(plot_data, use_container_width=True)
+                else:
+                    st.warning("Could not complete backtest. Try a different timeframe.")
+            except Exception as e:
+                st.error(f"Error during backtest: {str(e)}")
+                st.info("Check the logs for more details.")
+    
 # Best parameters management
 with st.sidebar.expander("Parameter Management", expanded=True):
     st.text("Composite Indicator Parameters")
@@ -88,9 +127,29 @@ with st.sidebar.expander("Parameter Management", expanded=True):
     # Add button to optimize parameters
     if st.button("Find Best Parameters"):
         with st.spinner("Running parameter optimization... This may take a minute..."):
-            # Placeholder for the find_best_params function
-            st.info("Parameter optimization function would run here")
-            # We would call a variation of backtest_individual.find_best_params() here
+            # Use the find_best_params function from backtest_individual.py
+            from attached_assets.backtest_individual import find_best_params
+            try:
+                # Define parameter grid based on current symbol
+                param_grid = {
+                    'macd_weight': [0.25, 0.5, 0.75, 1.0],
+                    'rsi_weight': [0.25, 0.5, 0.75, 1.0],
+                    'stoch_weight': [0.25, 0.5, 0.75, 1.0],
+                    'fractal_weight': [0.1, 0.25, 0.5],
+                    'reactivity': [0.5, 1.0, 1.5, 2.0]
+                }
+                
+                # Run the parameter optimization
+                best_params = find_best_params(selected_symbol, param_grid, days=lookback_days)
+                
+                if best_params:
+                    st.success(f"Optimization complete! Found best parameters for {selected_symbol}")
+                    st.json(best_params)
+                else:
+                    st.warning("Could not determine optimal parameters. Using defaults.")
+            except Exception as e:
+                st.error(f"Error during parameter optimization: {str(e)}")
+                st.info("Using default parameters instead.")
 
 # Button to force refresh data
 if st.sidebar.button("Refresh Data Now"):
@@ -99,13 +158,17 @@ if st.sidebar.button("Refresh Data Now"):
 # Display information about the app
 with st.sidebar.expander("About", expanded=False):
     st.markdown("""
-    This app displays real-time BTC-USD price data with technical indicators and generates buy/sell signals.
+    This app displays real-time cryptocurrency price data with technical indicators and generates buy/sell signals.
     
     **Features:**
-    - Real-time price data from Yahoo Finance
-    - Technical indicators (MACD, RSI, Stochastic)
-    - Fractal complexity analysis
-    - Buy/sell signals based on indicator combinations
+    - Real-time price data from Yahoo Finance for multiple crypto assets
+    - Technical indicators (MACD, RSI, Stochastic, Fractal Complexity)
+    - Daily and Weekly Composite indicators with threshold bands
+    - Automated buy/sell signals based on indicator combinations
+    - Portfolio simulation with performance tracking
+    - Asset performance ranking and comparison
+    - Parameter optimization for trading strategies
+    - Full backtest capabilities with performance metrics
     
     *Data updates automatically based on the selected interval.*
     """)
