@@ -6,11 +6,21 @@ import numpy as np
 import datetime
 import time
 import sys
+import json
+import pytz
+from datetime import timedelta
 
 # Add the attached_assets directory to sys.path
 sys.path.append('.')
 
 from utils import fetch_and_process_data, generate_signals_with_indicators
+from trading_config import TRADING_SYMBOLS, TRADING_COSTS, DEFAULT_RISK_PERCENT
+from attached_assets.indicators import get_default_params
+try:
+    from replit.object_storage import Client
+    object_storage_available = True
+except ImportError:
+    object_storage_available = False
 
 # Page configuration
 st.set_page_config(
@@ -19,12 +29,20 @@ st.set_page_config(
     layout="wide"
 )
 
-# Header
-st.title("BTC-USD Price Monitor with Technical Indicators")
-st.markdown("Real-time price data with signal alerts based on technical indicators")
-
 # Sidebar for controls
 st.sidebar.header("Settings")
+
+# Symbol selection
+symbol_options = list(TRADING_SYMBOLS.keys())
+selected_symbol = st.sidebar.selectbox(
+    "Symbol",
+    symbol_options,
+    index=0  # BTC/USD is the first
+)
+
+# Header
+st.title(f"{selected_symbol} Price Monitor with Technical Indicators")
+st.markdown("Real-time price data with signal alerts based on technical indicators")
 
 # Timeframe selection
 timeframe = st.sidebar.selectbox(
@@ -56,6 +74,23 @@ with st.sidebar.expander("Indicator Settings", expanded=True):
     show_stochastic = st.checkbox("Show Stochastic", value=True)
     show_fractal = st.checkbox("Show Fractal Complexity", value=True)
     show_signals = st.checkbox("Show Buy/Sell Signals", value=True)
+    
+# Simulation settings
+with st.sidebar.expander("Portfolio Simulation", expanded=True):
+    enable_simulation = st.checkbox("Enable Portfolio Simulation", value=True)
+    initial_capital = st.number_input("Initial Capital ($)", value=100000, step=10000)
+    
+# Best parameters management
+with st.sidebar.expander("Parameter Management", expanded=True):
+    st.text("Composite Indicator Parameters")
+    use_best_params = st.checkbox("Use Optimized Parameters", value=True)
+    
+    # Add button to optimize parameters
+    if st.button("Find Best Parameters"):
+        with st.spinner("Running parameter optimization... This may take a minute..."):
+            # Placeholder for the find_best_params function
+            st.info("Parameter optimization function would run here")
+            # We would call a variation of backtest_individual.find_best_params() here
 
 # Button to force refresh data
 if st.sidebar.button("Refresh Data Now"):
@@ -75,15 +110,163 @@ with st.sidebar.expander("About", expanded=False):
     *Data updates automatically based on the selected interval.*
     """)
 
+# Function to load best parameters from object storage
+def load_best_params(symbol):
+    """
+    Load best parameters for a symbol from Replit Object Storage
+    
+    Args:
+        symbol: Trading symbol (e.g., 'BTC/USD')
+        
+    Returns:
+        Dict of parameters or None if not found
+    """
+    best_params_file = "best_params.json"
+    
+    try:
+        if object_storage_available:
+            # Try to get parameters from Object Storage
+            client = Client()
+            json_content = client.download_as_text(best_params_file)
+            best_params_data = json.loads(json_content)
+            st.success("Successfully loaded parameters from Object Storage")
+        else:
+            # Try local file as fallback
+            with open(best_params_file, "r") as f:
+                best_params_data = json.load(f)
+                st.success("Loaded parameters from local file")
+                
+        if symbol in best_params_data:
+            params = best_params_data[symbol]['best_params']
+            return params
+        else:
+            st.warning(f"No optimized parameters found for {symbol}. Using defaults.")
+            return None
+    except Exception as e:
+        st.warning(f"Error loading parameters: {str(e)}. Using defaults.")
+        return None
+
+# Function to simulate portfolio based on signals
+def simulate_portfolio(signals_df, price_data, initial_capital=100000):
+    """
+    Simulate portfolio performance based on trading signals
+    
+    Args:
+        signals_df: DataFrame with trading signals
+        price_data: DataFrame with price data
+        initial_capital: Initial capital in USD
+        
+    Returns:
+        DataFrame with portfolio performance
+    """
+    if signals_df is None or signals_df.empty:
+        return None
+        
+    # Initialize portfolio tracking
+    position = 0  # Current position in shares
+    cash = initial_capital
+    portfolio_value = []  # Portfolio value over time
+    shares_owned = []  # Shares owned over time
+    
+    # For each row in the signals DataFrame
+    for idx, row in signals_df.iterrows():
+        signal = row.get('signal', 0)
+        price = price_data.loc[idx, 'close'] if idx in price_data.index else 0
+        
+        if price == 0:
+            continue
+            
+        # Process buy signal
+        if signal == 1 and cash > 0:
+            # Calculate how many shares to buy (use 95% of available cash)
+            amount_to_use = cash * 0.95
+            shares_to_buy = amount_to_use / price
+            
+            # Crypto can be fractional, stocks might need to be whole numbers
+            shares_to_buy = round(shares_to_buy, 8)
+            
+            # Update position
+            position += shares_to_buy
+            cash -= shares_to_buy * price
+            
+        # Process sell signal    
+        elif signal == -1 and position > 0:
+            # Sell all shares
+            cash += position * price
+            position = 0
+            
+        # Calculate portfolio value
+        current_value = cash + (position * price)
+        portfolio_value.append(current_value)
+        shares_owned.append(position)
+    
+    # Create a DataFrame for the portfolio history
+    portfolio_df = pd.DataFrame({
+        'portfolio_value': portfolio_value,
+        'shares_owned': shares_owned
+    }, index=signals_df.index)
+    
+    return portfolio_df
+
 # Create placeholders for charts
 price_chart_placeholder = st.empty()
 indicators_placeholder = st.empty()
 signals_placeholder = st.empty()
+portfolio_placeholder = st.empty()
+
+# Calculate performance ranking for assets
+def calculate_performance_ranking(prices_dataset=None, lookback_days=15):
+    """Calculate simple performance ranking across assets for display"""
+    if prices_dataset is None:
+        prices_dataset = {}
+        # Fetch data for multiple assets
+        for symbol, config in TRADING_SYMBOLS.items():
+            yf_symbol = config['yfinance']
+            if '/' in yf_symbol:
+                yf_symbol = yf_symbol.replace('/', '-')
+                
+            try:
+                from attached_assets.fetch import fetch_historical_data
+                data = fetch_historical_data(symbol, interval=timeframe, days=lookback_days)
+                if not data.empty:
+                    prices_dataset[symbol] = data
+            except Exception as e:
+                st.warning(f"Error fetching data for {symbol}: {str(e)}")
+    
+    # Calculate performance for each asset
+    performance_dict = {}
+    for symbol, data in prices_dataset.items():
+        try:
+            if len(data) >= 2:
+                # Make column names lowercase if they aren't already
+                if data.columns[0].isupper():
+                    data.columns = data.columns.str.lower()
+                
+                start_price = data['close'].iloc[0]
+                end_price = data['close'].iloc[-1]
+                performance = ((end_price - start_price) / start_price) * 100
+                performance_dict[symbol] = performance
+        except Exception as e:
+            st.warning(f"Error calculating performance for {symbol}: {str(e)}")
+    
+    # Convert to DataFrame and calculate rankings
+    if performance_dict:
+        perf_df = pd.DataFrame.from_dict(performance_dict, 
+                                        orient='index', 
+                                        columns=['performance'])
+        perf_df['rank'] = perf_df['performance'].rank(method='dense', pct=True)
+        return perf_df
+    return None
 
 # Function to update the charts
 def update_charts():
+    # Load optimal parameters if enabled
+    params = None
+    if use_best_params:
+        params = load_best_params(selected_symbol)
+    
     # Fetch and process the data
-    df, error = fetch_and_process_data('BTC/USD', timeframe, lookback_days)
+    df, error = fetch_and_process_data(selected_symbol, timeframe, lookback_days)
     
     if error:
         st.error(f"Error fetching data: {error}")
@@ -156,7 +339,7 @@ def update_charts():
     
     # Update layout with better y-axis scaling
     fig1.update_layout(
-        title="BTC-USD Price with Signal Indicators",
+        title=f"{selected_symbol} Price with Signal Indicators",
         height=600,
         margin=dict(l=0, r=0, t=40, b=0),
         legend=dict(
@@ -469,6 +652,129 @@ def update_charts():
     else:
         signals_placeholder.info("No signals generated in the selected timeframe.")
 
+    # Add portfolio simulation if enabled
+    if enable_simulation:
+        with portfolio_placeholder.container():
+            st.subheader("Portfolio Simulation")
+            
+            # Simulate the portfolio
+            portfolio_df = simulate_portfolio(signals_df, df, initial_capital=initial_capital)
+            
+            if portfolio_df is not None and not portfolio_df.empty:
+                # Create portfolio value chart
+                fig_portfolio = make_subplots(rows=2, cols=1, 
+                                             shared_xaxes=True,
+                                             vertical_spacing=0.05,
+                                             row_heights=[0.7, 0.3],
+                                             subplot_titles=("Portfolio Value", "Shares Owned"))
+                
+                # Add portfolio value line
+                fig_portfolio.add_trace(
+                    go.Scatter(
+                        x=portfolio_df.index,
+                        y=portfolio_df['portfolio_value'],
+                        mode='lines',
+                        name="Portfolio Value",
+                        line=dict(color='green', width=2)
+                    ),
+                    row=1, col=1
+                )
+                
+                # Add horizontal line for initial capital
+                fig_portfolio.add_trace(
+                    go.Scatter(
+                        x=[portfolio_df.index[0], portfolio_df.index[-1]],
+                        y=[initial_capital, initial_capital],
+                        mode='lines',
+                        name="Initial Capital",
+                        line=dict(color='gray', width=1, dash='dash')
+                    ),
+                    row=1, col=1
+                )
+                
+                # Add shares owned line
+                fig_portfolio.add_trace(
+                    go.Scatter(
+                        x=portfolio_df.index,
+                        y=portfolio_df['shares_owned'],
+                        mode='lines',
+                        name="Shares Owned",
+                        line=dict(color='purple', width=2)
+                    ),
+                    row=2, col=1
+                )
+                
+                # Update layout
+                fig_portfolio.update_layout(
+                    height=500,
+                    margin=dict(l=0, r=0, t=40, b=0),
+                    showlegend=True
+                )
+                
+                # Set y-axis titles
+                fig_portfolio.update_yaxes(title_text="Value ($)", row=1, col=1)
+                fig_portfolio.update_yaxes(title_text="Shares", row=2, col=1)
+                
+                # Display the portfolio chart
+                st.plotly_chart(fig_portfolio, use_container_width=True, key=f"portfolio_chart_{int(time.time())}")
+                
+                # Show portfolio statistics
+                if len(portfolio_df) > 0:
+                    final_value = portfolio_df['portfolio_value'].iloc[-1]
+                    max_value = portfolio_df['portfolio_value'].max()
+                    min_value = portfolio_df['portfolio_value'].min()
+                    max_drawdown = ((max_value - min_value) / max_value) * 100
+                    roi = ((final_value - initial_capital) / initial_capital) * 100
+                    
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Current Value", f"${final_value:,.2f}", f"{roi:.2f}%")
+                    col2.metric("Maximum Value", f"${max_value:,.2f}")
+                    col3.metric("Maximum Drawdown", f"{max_drawdown:.2f}%")
+            else:
+                st.info("No signals available to simulate portfolio. Try a different timeframe or symbol.")
+    
+    # Add asset performance comparison
+    st.subheader("Asset Performance Comparison")
+    performance_df = calculate_performance_ranking(lookback_days=lookback_days)
+    
+    if performance_df is not None and not performance_df.empty:
+        # Create a bar chart for the performance ranking
+        fig_perf = go.Figure()
+        
+        # Sort by performance descending
+        performance_df = performance_df.sort_values('performance', ascending=False)
+        
+        # Add bars
+        fig_perf.add_trace(
+            go.Bar(
+                x=performance_df.index,
+                y=performance_df['performance'],
+                marker_color=['green' if x > 0 else 'red' for x in performance_df['performance']],
+                text=[f"{x:.2f}%" for x in performance_df['performance']],
+                textposition='outside'
+            )
+        )
+        
+        # Update layout
+        fig_perf.update_layout(
+            title="Performance Over Selected Period",
+            yaxis_title="% Change",
+            height=400,
+            margin=dict(l=0, r=0, t=40, b=0)
+        )
+        
+        # Display the performance chart
+        st.plotly_chart(fig_perf, use_container_width=True, key=f"perf_chart_{int(time.time())}")
+        
+        # Display a table with more details
+        performance_df['performance'] = performance_df['performance'].apply(lambda x: f"{x:.2f}%")
+        performance_df['rank'] = performance_df['rank'].apply(lambda x: f"{x*100:.1f}%")
+        performance_df.columns = ['Performance', 'Percentile Rank']
+        
+        st.dataframe(performance_df, use_container_width=True)
+    else:
+        st.info("Unable to calculate performance ranking. Try a different timeframe.")
+        
     # Show last update time
     st.caption(f"Last updated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
