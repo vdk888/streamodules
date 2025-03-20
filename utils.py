@@ -94,6 +94,38 @@ def generate_signals_with_indicators(data: pd.DataFrame, params: Optional[Dict] 
 
         # Use the generate_signals function from indicators.py
         signals, daily_data, weekly_data = generate_signals(data, params)
+        
+        # Calculate technical indicators manually
+        from attached_assets.indicators import calculate_rsi, calculate_stochastic, calculate_fractal_complexity
+        
+        # Add close price for reference
+        signals['close'] = data['close']
+        
+        # Calculate MACD
+        fast = params['macd_fast']
+        slow = params['macd_slow']
+        signal_period = params['macd_signal']
+        
+        ema_fast = data['close'].ewm(span=fast, adjust=False).mean()
+        ema_slow = data['close'].ewm(span=slow, adjust=False).mean()
+        macd_line = ema_fast - ema_slow
+        macd_signal = macd_line.ewm(span=signal_period, adjust=False).mean()
+        macd_hist = macd_line - macd_signal
+        
+        signals['macd'] = macd_line
+        signals['macd_signal'] = macd_signal
+        signals['macd_hist'] = macd_hist
+        
+        # Add RSI
+        signals['rsi'] = calculate_rsi(data, period=params['rsi_period'])
+        
+        # Add Stochastic
+        stoch_k = calculate_stochastic(data, k_period=params['stochastic_k_period'], d_period=params['stochastic_d_period'])
+        signals['stoch_k'] = stoch_k
+        signals['stoch_d'] = stoch_k.rolling(params['stochastic_d_period']).mean()
+        
+        # Add Fractal Complexity
+        signals['fractal'] = calculate_fractal_complexity(data)
 
         return signals, daily_data, weekly_data
 
@@ -114,14 +146,21 @@ def get_indicator_values(data: pd.DataFrame) -> Dict[str, pd.Series]:
         Dictionary of indicator names to Series of values
     """
     from attached_assets.indicators import (
-        calculate_macd, calculate_rsi, calculate_stochastic, 
+        calculate_rsi, calculate_stochastic, 
         calculate_fractal_complexity
     )
 
     indicators = {}
 
-    # Calculate MACD
-    indicators['macd'] = calculate_macd(data)
+    # Calculate MACD manually
+    fast = 12
+    slow = 26
+    signal_period = 9
+    
+    ema_fast = data['close'].ewm(span=fast, adjust=False).mean()
+    ema_slow = data['close'].ewm(span=slow, adjust=False).mean()
+    macd_line = ema_fast - ema_slow
+    indicators['macd'] = macd_line
 
     # Calculate RSI
     indicators['rsi'] = calculate_rsi(data)
