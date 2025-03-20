@@ -248,22 +248,81 @@ def simulate_portfolio(signals_df, price_data, initial_capital=100000):
     cash = initial_capital
     portfolio_value = []  # Portfolio value over time
     shares_owned = []  # Shares owned over time
+    trade_ranks = []  # Store the rank for each trade
+    
+    # For iterating through crypto assets, fetch data for all
+    prices_dataset = {}
+    # Fetch data for multiple assets (only once at the beginning)
+    for symbol, config in TRADING_SYMBOLS.items():
+        yf_symbol = config['yfinance']
+        if '/' in yf_symbol:
+            yf_symbol = yf_symbol.replace('/', '-')
+
+        try:
+            from attached_assets.fetch import fetch_historical_data
+            data = fetch_historical_data(symbol, interval=timeframe, days=lookback_days)
+            if not data.empty:
+                prices_dataset[symbol] = data
+        except Exception as e:
+            st.warning(f"Error fetching data for {symbol}: {str(e)}")
 
     # For each row in the signals DataFrame
     for idx, row in signals_df.iterrows():
         signal = row.get('signal', 0)
         price = price_data.loc[idx, 'close'] if idx in price_data.index else 0
+        current_rank = None
 
         if price == 0:
             continue
 
+        # Calculate performance ranking at this timestamp if we have enough data
+        if prices_dataset:
+            # Use the backtest's ranking algorithm
+            current_time = idx
+            lookback_period = lookback_days  # Use the app's lookback slider
+            perf_rankings = backtest_calculate_ranking(prices_dataset, current_time, lookback_period)
+            
+            if perf_rankings is not None and selected_symbol in perf_rankings.index:
+                # Get the raw rank value (percentile)
+                raw_rank = perf_rankings.loc[selected_symbol, 'rank']
+                
+                # Calculate integer rank (1 is best, total_assets is worst)
+                total_assets = len(perf_rankings)
+                rank = 1 + sum(1 for other_metric in perf_rankings['rank'].values if other_metric > raw_rank)
+                current_rank = rank
+
         # Process buy signal
         if signal == 1 and cash > 0:
-            # Calculate how many shares to buy (use 95% of available cash)
-            amount_to_use = cash * 0.95
-            shares_to_buy = amount_to_use / price
+            if current_rank is not None:
+                # Use the ranking-based buy percentage from backtest_individual.py
+                total_assets = len(prices_dataset)
+                
+                # Calculate buy percentage using the same formula as in backtest_individual.py
+                def calculate_buy_percentage(rank, total_assets):
+                    # Calculate cutoff points
+                    bottom_third = int(total_assets * (1 / 3))
+                    top_two_thirds = total_assets - bottom_third
 
-            # Crypto can be fractional, stocks might need to be whole numbers
+                    # If in bottom third, buy 0%
+                    if rank > top_two_thirds:
+                        return 0.0
+
+                    # For top two-thirds, use inverted wave function
+                    x = (rank - 1) / (top_two_thirds - 1)
+                    wave = 0.02 * np.sin(2 * np.pi * x)  # Smaller oscillation
+                    linear = 0.48 - 0.48 * x  # Linear decrease from 0.48 to 0.0
+                    return max(0.0, min(0.5, linear + wave))  # Clamp between 0.0 and 0.5
+                
+                buy_percentage = calculate_buy_percentage(current_rank, total_assets)
+                amount_to_use = cash * buy_percentage
+            else:
+                # Fallback to the original fixed percentage
+                amount_to_use = cash * 0.95
+                
+            # Calculate shares to buy
+            shares_to_buy = amount_to_use / price if price > 0 else 0
+
+            # Crypto can be fractional
             shares_to_buy = round(shares_to_buy, 8)
 
             # Update position
@@ -272,19 +331,46 @@ def simulate_portfolio(signals_df, price_data, initial_capital=100000):
 
         # Process sell signal    
         elif signal == -1 and position > 0:
-            # Sell all shares
-            cash += position * price
-            position = 0
+            if current_rank is not None:
+                # Use the ranking-based sell percentage from backtest_individual.py
+                total_assets = len(prices_dataset)
+                
+                # Calculate sell percentage using the same formula as in backtest_individual.py
+                def calculate_sell_percentage(rank, total_assets):
+                    # Calculate cutoff points
+                    bottom_third = int(total_assets * (1 / 3))
+                    top_two_thirds = total_assets - bottom_third
+
+                    # If in bottom third, sell 100%
+                    if rank > top_two_thirds:
+                        return 1.0
+
+                    # For top two-thirds, use a wave function
+                    x = (rank - 1) / (top_two_thirds - 1)
+                    wave = 0.1 * np.sin(2 * np.pi * x)  # Oscillation between -0.1 and 0.1
+                    linear = 0.3 + 0.7 * x  # Linear increase from 0.3 to 1.0
+                    return max(0.1, min(1.0, linear + wave))  # Clamp between 0.1 and 1.0
+                
+                sell_percentage = calculate_sell_percentage(current_rank, total_assets)
+                shares_to_sell = position * sell_percentage
+                cash += shares_to_sell * price
+                position -= shares_to_sell
+            else:
+                # Fallback to selling all shares
+                cash += position * price
+                position = 0
 
         # Calculate portfolio value
         current_value = cash + (position * price)
         portfolio_value.append(current_value)
         shares_owned.append(position)
+        trade_ranks.append(current_rank)  # Add rank information
 
     # Create a DataFrame for the portfolio history
     portfolio_df = pd.DataFrame({
         'portfolio_value': portfolio_value,
-        'shares_owned': shares_owned
+        'shares_owned': shares_owned,
+        'rank': trade_ranks  # Include the rank information
     }, index=signals_df.index)
 
     return portfolio_df
