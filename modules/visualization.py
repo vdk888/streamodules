@@ -44,9 +44,10 @@ def create_price_chart(price_data: pd.DataFrame,
         rows += 1
         
     # Create subplots with appropriate row heights
-    row_heights = [0.6]  # First row is the price chart (60% of height)
+    row_heights = [0.5]  # First row is the price chart (50% of height)
+    height_per_indicator = 0.5 / (rows - 1) if rows > 1 else 0.5  # Remaining rows share 50% of height equally
     for _ in range(rows - 1):
-        row_heights.append(0.4 / (rows - 1))  # Remaining rows share 40% of height equally
+        row_heights.append(height_per_indicator)
         
     # Create figure
     fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, 
