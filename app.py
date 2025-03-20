@@ -39,10 +39,10 @@ def update_charts():
     # Load optimal parameters if enabled
     params = None
     if settings["use_best_params"]:
-        params = load_best_params(settings["selected_symbol"])
+        params = load_best_params(settings["symbol"])  # Use "symbol" key
     
     # Fetch and process the data
-    df, error = get_price_data(settings["selected_symbol"], settings["timeframe"], settings["lookback_days"])
+    df, error = get_price_data(settings["symbol"], settings["timeframe"], settings["lookback_days"])
     
     if error:
         st.error(f"Error fetching data: {error}")
@@ -66,7 +66,7 @@ def update_charts():
             signals_df=signals_df,
             price_data=df,
             prices_dataset=prices_dataset,
-            selected_symbol=settings["selected_symbol"],
+            selected_symbol=settings["symbol"],  # Use "symbol" key
             lookback_days=settings["lookback_days"],
             initial_capital=settings["initial_capital"]
         )
@@ -160,22 +160,33 @@ def main():
     
     # Initialize UI components and get settings
     settings = create_sidebar()
+    
+    # Update the state_container settings with the values from the UI
+    # Make sure we have a 'selected_symbol' key that matches 'symbol'
+    settings['selected_symbol'] = settings['symbol']
+    
+    # Add the missing keys that our state_container expects
+    if 'force_refresh' not in settings:
+        settings['force_refresh'] = False
+    if 'use_best_params' not in settings:
+        settings['use_best_params'] = False
+        
     state_container.settings = settings
     
     # Set up auto-refresh components
     auto_refresh_placeholder, progress_bar = setup_auto_refresh(settings["update_interval"])
     
     # Display backtest button and handle logic
-    handle_backtest_button(settings["selected_symbol"], settings["lookback_days"])
+    handle_backtest_button(settings["symbol"], settings["lookback_days"])
     
     # Display optimization button and handle logic
-    handle_optimization_button(settings["selected_symbol"], settings["lookback_days"])
+    handle_optimization_button(settings["symbol"], settings["lookback_days"])
     
     # Update charts
     update_charts()
     
     # Auto-refresh logic
-    if not settings["force_refresh"]:  # Only run this if not manually refreshed
+    if settings["auto_refresh"]:  # Only run auto-refresh if enabled
         start_time = time.time()
         update_interval = settings["update_interval"]
         
