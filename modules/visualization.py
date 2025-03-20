@@ -44,8 +44,8 @@ def create_price_chart(price_data: pd.DataFrame,
         rows += 1
         
     # Create subplots with appropriate row heights
-    row_heights = [0.5]  # First row is the price chart (50% of height)
-    height_per_indicator = 0.5 / (rows - 1) if rows > 1 else 0.5  # Remaining rows share 50% of height equally
+    row_heights = [0.6]  # First row is the price chart (60% of height)
+    height_per_indicator = 0.4 / (rows - 1) if rows > 1 else 0.4  # Remaining rows share 40% of height equally
     for _ in range(rows - 1):
         row_heights.append(height_per_indicator)
         
@@ -323,7 +323,7 @@ def create_price_chart(price_data: pd.DataFrame,
         title=f"{price_data.iloc[-1]['symbol'] if 'symbol' in price_data.columns else ''} Price Chart with Indicators",
         xaxis_title="Date",
         yaxis_title="Price",
-        height=rows * 200,
+        height=rows * 250,  # Increased height per row
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -331,7 +331,8 @@ def create_price_chart(price_data: pd.DataFrame,
             xanchor="right",
             x=1
         ),
-        xaxis_rangeslider_visible=False
+        xaxis_rangeslider_visible=False,
+        margin=dict(t=30, l=50, r=50, b=30)  # Add some margin
     )
     
     # Set y-axis range for price chart (row 1) to fit all data plus some margin
