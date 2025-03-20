@@ -133,7 +133,7 @@ def create_price_chart(price_data: pd.DataFrame,
             line=dict(color='black', width=1.5),
             name="Portfolio Value",
             yaxis="y2"
-        ), row=1, col=1)
+        ), row=current_row, col=1)
 
         # Update layout to include the secondary y-axis
         fig.update_layout(
