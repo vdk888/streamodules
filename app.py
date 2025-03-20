@@ -477,7 +477,7 @@ def backtest_calculate_ranking(prices_dataset, current_time, lookback_days_param
                                         columns=['performance'])
         # Sort by performance descending and calculate percentile rank
             perf_df = perf_df.sort_values('performance', ascending=False)
-            perf_df['rank'] = (perf_df['performance'].rank(ascending=False) / len(perf_df)) * 100
+        perf_df['rank'] = (perf_df['performance'].rank(ascending=False) / len(perf_df)) * 100
 
         return perf_df
     return None
@@ -1076,34 +1076,55 @@ def update_charts():
         else:
             st.error("Unable to calculate performance ranking. Try a different timeframe.")
 
-    # Display best parameters
-    st.subheader("Best Parameters")
+    # Display best parameters for selected symbol
+    st.subheader(f"Best Parameters for {selected_symbol}")
     try:
-        # Load best parameters file
-        import json
-        with open("best_params.json", "r") as f:
-            best_params_data = json.load(f)
+        params = None
+        source = None
+        
+        # Try Replit Object Storage first
+        try:
+            from replit.object_storage import Client
+            client = Client()
+            json_content = client.download_as_text("best_params.json")
+            best_params_data = json.loads(json_content)
+            if selected_symbol in best_params_data:
+                params = best_params_data[selected_symbol]
+                source = "Replit Object Storage"
+        except Exception:
+            # Try local file as fallback
+            try:
+                with open("best_params.json", "r") as f:
+                    best_params_data = json.load(f)
+                    if selected_symbol in best_params_data:
+                        params = best_params_data[selected_symbol]
+                        source = "Local File"
+            except FileNotFoundError:
+                pass
+                
+        if params:
+            st.info(f"Parameters source: {source}")
+            best_params = params['best_params']
+            metrics = params.get('metrics', {})
             
-        # Create a more readable format for display
-        display_data = []
-        for symbol, data in best_params_data.items():
-            if 'best_params' in data:
-                params = data['best_params']
-                metrics = data.get('metrics', {})
-                
-                display_data.append({
-                    "Symbol": symbol,
-                    "MACD Weight": f"{params.get('macd_weight', 'N/A'):.2f}",
-                    "RSI Weight": f"{params.get('rsi_weight', 'N/A'):.2f}",
-                    "Stoch Weight": f"{params.get('stoch_weight', 'N/A'):.2f}",
-                    "Fractal Weight": f"{params.get('fractal_weight', 'N/A'):.2f}",
-                    "Reactivity": f"{params.get('reactivity', 'N/A'):.2f}",
-                    "Performance": f"{metrics.get('performance', 'N/A'):.2f}%",
-                    "Win Rate": f"{metrics.get('win_rate', 'N/A'):.1f}%"
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("Parameters:")
+                st.json({
+                    "MACD Weight": round(best_params.get('macd_weight', 0), 2),
+                    "RSI Weight": round(best_params.get('rsi_weight', 0), 2),
+                    "Stoch Weight": round(best_params.get('stoch_weight', 0), 2),
+                    "Fractal Weight": round(best_params.get('fractal_weight', 0), 2),
+                    "Reactivity": round(best_params.get('reactivity', 0), 2)
                 })
-                
-        if display_data:
-            st.dataframe(pd.DataFrame(display_data).set_index('Symbol'))
+            
+            with col2:
+                st.write("Performance Metrics:")
+                st.json({
+                    "Performance": f"{metrics.get('performance', 0):.2f}%",
+                    "Win Rate": f"{metrics.get('win_rate', 0):.1f}%",
+                    "Max Drawdown": f"{metrics.get('max_drawdown', 0):.2f}%"
+                })
         else:
             st.info("No parameter data available")
             
