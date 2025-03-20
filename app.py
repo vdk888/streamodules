@@ -31,8 +31,18 @@ st.set_page_config(
 
 def update_charts():
     """
-    Update all charts and data displays
+    Update all charts and data displays using containers
     """
+    # Initialize containers if they don't exist
+    if 'chart_container' not in st.session_state:
+        st.session_state.chart_container = st.empty()
+    if 'portfolio_container' not in st.session_state:
+        st.session_state.portfolio_container = st.empty()
+    if 'metrics_container' not in st.session_state:
+        st.session_state.metrics_container = st.empty()
+    if 'ranking_container' not in st.session_state:
+        st.session_state.ranking_container = st.empty()
+        
     # Get UI settings
     settings = state_container.settings
     
@@ -85,37 +95,40 @@ def update_charts():
         show_signals=settings["show_signals"]
     )
     
-    # Display the main chart
-    st.plotly_chart(main_chart, use_container_width=True)
+    # Update the main chart
+    st.session_state.chart_container.plotly_chart(main_chart, use_container_width=True)
     
-    # Display portfolio performance if available
+    # Update portfolio performance if available
     if portfolio_df is not None:
-        st.subheader("Portfolio Performance")
-        portfolio_chart = create_portfolio_performance_chart(portfolio_df)
-        if portfolio_chart:
-            st.plotly_chart(portfolio_chart, use_container_width=True)
+        with st.session_state.portfolio_container.container():
+            st.subheader("Portfolio Performance")
+            portfolio_chart = create_portfolio_performance_chart(portfolio_df)
+            if portfolio_chart:
+                st.plotly_chart(portfolio_chart, use_container_width=True)
         
-        # Display some key metrics from the portfolio simulation
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            initial_value = portfolio_df['portfolio_value'].iloc[0]
-            final_value = portfolio_df['portfolio_value'].iloc[-1]
-            total_return = ((final_value / initial_value) - 1) * 100
-            st.metric("Total Return", f"{total_return:.2f}%")
-        with col2:
-            max_drawdown = portfolio_df['drawdown'].max() * 100
-            st.metric("Max Drawdown", f"{max_drawdown:.2f}%")
-        with col3:
-            sharpe_ratio = portfolio_df['returns'].mean() / portfolio_df['returns'].std() if portfolio_df['returns'].std() > 0 else 0
-            st.metric("Sharpe Ratio", f"{sharpe_ratio:.2f}")
-        with col4:
-            profit_days = (portfolio_df['returns'] > 0).sum()
-            total_days = len(portfolio_df)
-            win_rate = (profit_days / total_days) * 100 if total_days > 0 else 0
-            st.metric("Win Rate", f"{win_rate:.2f}%")
+        # Update metrics
+        with st.session_state.metrics_container.container():
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                initial_value = portfolio_df['portfolio_value'].iloc[0]
+                final_value = portfolio_df['portfolio_value'].iloc[-1]
+                total_return = ((final_value / initial_value) - 1) * 100
+                st.metric("Total Return", f"{total_return:.2f}%")
+            with col2:
+                max_drawdown = portfolio_df['drawdown'].max() * 100
+                st.metric("Max Drawdown", f"{max_drawdown:.2f}%")
+            with col3:
+                sharpe_ratio = portfolio_df['returns'].mean() / portfolio_df['returns'].std() if portfolio_df['returns'].std() > 0 else 0
+                st.metric("Sharpe Ratio", f"{sharpe_ratio:.2f}")
+            with col4:
+                profit_days = (portfolio_df['returns'] > 0).sum()
+                total_days = len(portfolio_df)
+                win_rate = (profit_days / total_days) * 100 if total_days > 0 else 0
+                st.metric("Win Rate", f"{win_rate:.2f}%")
     
-    # Display asset performance ranking
-    st.subheader("Asset Performance Ranking")
+    # Update asset performance ranking
+    with st.session_state.ranking_container.container():
+        st.subheader("Asset Performance Ranking")
     prices_dataset = get_multi_asset_data(TRADING_SYMBOLS, settings["timeframe"], settings["lookback_days"])
     performance_df = calculate_performance_ranking(prices_dataset, settings["lookback_days"])
     
