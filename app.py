@@ -864,7 +864,8 @@ update_charts()
 
 # Auto-update the charts
 if st.checkbox("Enable auto-refresh", value=True):
-    auto_refresh_placeholder = st.empty()    progress_bar = auto_refresh_placeholder.progress(0)
+    auto_refresh_placeholder = st.empty()
+    progress_bar = auto_refresh_placeholder.progress(0)
 
     while True:
         for i in range(update_interval):
