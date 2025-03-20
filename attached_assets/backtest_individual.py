@@ -118,9 +118,9 @@ def find_best_params(symbol: str,
     try:
         with open(output_file, "r") as f:
             existing_data = json.load(f)
-            print(f"Loaded {output_file} from local filesystem")
+            logger.info(f"Loaded {output_file} from local filesystem")
     except FileNotFoundError:
-        print(f"Creating new {output_file} as it doesn't exist")
+        logger.info(f"Creating new {output_file} as it doesn't exist")
         existing_data = {}
         
     # Then try Replit Object Storage if available
@@ -130,14 +130,14 @@ def find_best_params(symbol: str,
         client = Client()
         json_content = client.download_as_text(output_file)
         storage_data = json.loads(json_content)
-        print(f"Successfully loaded {output_file} from Object Storage")
+        logger.info(f"Successfully loaded {output_file} from Object Storage")
         
         # Merge the data from both sources, prioritizing Object Storage for existing symbols
         for key, value in storage_data.items():
             existing_data[key] = value
             
     except Exception as e:
-        print(f"File not found in Object Storage or error reading: {e}. Using local file only.")
+        logger.info(f"File not found in Object Storage or error reading: {e}. Using local file only.")
 
     # Check if the current symbol exists in the JSON data
     last_update_date = None
@@ -150,12 +150,13 @@ def find_best_params(symbol: str,
     # Determine if we need to run simulations
     if last_update_date:
         if datetime.now() - last_update_date < timedelta(weeks=1):
-            print(
+            logger.info(
                 f"Using existing best parameters for {symbol} (last updated on {last_update_date_str})."
             )
             return existing_data[symbol][
                 'best_params']  # Return existing best params
 
+    logger.info(f"Starting parameter optimization for {symbol}...")
     # Proceed with simulations if no existing data or it's older than a week
     param_combinations = [
         dict(zip(param_names, values)) for values in product(*param_values)
@@ -166,6 +167,7 @@ def find_best_params(symbol: str,
     best_metrics = {}
     performances = []  # List to store all performance metrics
 
+    logger.info(f"Total parameter combinations to test: {len(param_combinations)}")
     for params in param_combinations:
         # Update default parameters with the current combination
         default_params = get_default_params()
@@ -175,12 +177,17 @@ def find_best_params(symbol: str,
         weight_combination = default_params['weights']
         default_params.update(weight_combination)
 
+        logger.info(f"Testing parameters: {params}")
         # Run a single backtest with the current parameter set
         result = run_backtest(symbol,
                               days=days,
                               params=default_params,
                               is_simulating=True,
                               lookback_days_param=lookback_days_param)
+        if result is None:
+            logger.warning(f"Backtest failed for parameters: {params}")
+            continue
+
         performance = result['stats'][
             'total_return']  # Use total return as the performance metric
         win_rate = result['stats']['win_rate']  # Example metric
@@ -191,7 +198,7 @@ def find_best_params(symbol: str,
         # Store performance for later analysis
         performances.append(performance)
 
-        print(
+        logger.info(
             f"Params: {params}, Target {performance:.2f}%, Win Rate: {win_rate:.2f}%, Max Drawdown: {max_drawdown:.2f}%, Total Return: {total_return:.2f}%, Sharpe Ratio: {sharpe_ratio:.2f}"
         )
 
@@ -199,11 +206,7 @@ def find_best_params(symbol: str,
         if performance > best_performance:
             best_performance = performance
             best_params = params
-            best_metrics = {
-                'performance': performance,
-                'win_rate': win_rate,
-                'max_drawdown': max_drawdown,
-            }
+            logger.info(f"New best parameters found: {best_params} with performance {best_performance:.2f}%")
 
     # Calculate max, min, and average performance
     max_performance = max(performances)
@@ -229,7 +232,7 @@ def find_best_params(symbol: str,
                     'date': existing_data[symbol]['date']
                 })
             else:
-                print(f"Warning: Symbol {symbol} exists but is missing required fields for history update.")
+                logger.info(f"Warning: Symbol {symbol} exists but is missing required fields for history update.")
 
         # Update the symbol data with new best params and include history
         existing_data[symbol] = {
@@ -251,26 +254,26 @@ def find_best_params(symbol: str,
             client = Client()
             # Write updated data to Object Storage
             client.upload_from_text(output_file, json.dumps(existing_data, indent=4))
-            print(f"Successfully saved parameters to Replit Object Storage")
+            logger.info(f"Successfully saved parameters to Replit Object Storage")
             
             # Also save to local file as a backup
             try:
                 with open(output_file, "w") as f:
                     json.dump(existing_data, f, indent=4)
-                print(f"Also saved backup parameters to local file {output_file}")
+                logger.info(f"Also saved backup parameters to local file {output_file}")
             except Exception as e:
-                print(f"Warning: Could not save backup to local file: {e}, but parameters are still in Object Storage")
+                logger.info(f"Warning: Could not save backup to local file: {e}, but parameters are still in Object Storage")
         except Exception as e:
-            print(f"Warning: Could not save to Replit Object Storage: {e}. Falling back to local file.")
+            logger.info(f"Warning: Could not save to Replit Object Storage: {e}. Falling back to local file.")
             # Local file as fallback
             try:
                 with open(output_file, "w") as f:
                     json.dump(existing_data, f, indent=4)
-                print(f"Saved parameters to local file {output_file} as fallback")
+                logger.info(f"Saved parameters to local file {output_file} as fallback")
             except Exception as e2:
-                print(f"Critical error: Could not save parameters to any storage: {e2}")
+                logger.info(f"Critical error: Could not save parameters to any storage: {e2}")
 
-    print(f"Best params and metrics for {symbol} saved to Object Storage and local file")
+    logger.info(f"Best params and metrics for {symbol} saved to Object Storage and local file")
     return best_params
 
 
@@ -285,7 +288,7 @@ def run_backtest(symbol: str,
     end_date = datetime.now(pytz.UTC)
     start_date = end_date - timedelta(days=default_backtest_interval)  # 30 days of data
 
-    print(f"\nFetching data for {symbol} from {start_date} to {end_date}")
+    logger.info(f"\nFetching data for {symbol} from {start_date} to {end_date}")
 
     prices_dataset = {}
     for sym, config in TRADING_SYMBOLS.items():
@@ -293,21 +296,21 @@ def run_backtest(symbol: str,
         if '/' in yf_symbol:
             yf_symbol = yf_symbol.replace('/', '-')
 
-        print(f"Fetching {yf_symbol} data...")
+        logger.info(f"Fetching {yf_symbol} data...")
         ticker = yf.Ticker(yf_symbol)
         data = ticker.history(start=start_date,
                               end=end_date,
                               interval=default_interval_yahoo,
                               actions=True)
 
-        print(f"Retrieved {len(data)} data points for {sym}")
+        logger.info(f"Retrieved {len(data)} data points for {sym}")
 
         if len(data) == 0:
-            print(
+            logger.info(
                 f"Warning: No data available for {sym} in the specified date range"
             )
-            print(f"Start date: {start_date}, End date: {end_date}")
-            print(f"Symbol config: {config}")
+            logger.info(f"Start date: {start_date}, End date: {end_date}")
+            logger.info(f"Symbol config: {config}")
             continue
 
         # Localize timezone if needed
@@ -317,15 +320,15 @@ def run_backtest(symbol: str,
         # Filter for market hours
         market_hours_data = data[data.index.map(
             lambda x: is_market_hours(x, config['market_hours']))]
-        print(
+        logger.info(
             f"After market hours filtering: {len(market_hours_data)} data points for {sym}"
         )
 
         if len(market_hours_data) == 0:
-            print(
+            logger.info(
                 f"Warning: No data available for {sym} after market hours filtering"
             )
-            print(f"Market hours config: {config['market_hours']}")
+            logger.info(f"Market hours config: {config['market_hours']}")
             continue
 
         prices_dataset[sym] = market_hours_data
@@ -341,16 +344,16 @@ def run_backtest(symbol: str,
         client = Client()
         json_content = client.download_as_text(best_params_file)
         best_params_data = json.loads(json_content)
-        print(f"Successfully loaded best parameters from Replit Object Storage")
+        logger.info(f"Successfully loaded best parameters from Replit Object Storage")
     except Exception as e:
-        print(f"Could not read from Replit Object Storage: {e}. Falling back to local file.")
+        logger.info(f"Could not read from Replit Object Storage: {e}. Falling back to local file.")
         # Fall back to local file
         try:
             with open(best_params_file, "r") as f:
                 best_params_data = json.load(f)
-                print("Loaded best parameters from local file as fallback")
+                logger.info("Loaded best parameters from local file as fallback")
         except FileNotFoundError:
-            print("Best parameters file not found. Creating an empty one and using defaults.")
+            logger.info("Best parameters file not found. Creating an empty one and using defaults.")
             best_params_data = {}
             with open(best_params_file, "w") as f:
                 json.dump(best_params_data, f, indent=4)
@@ -359,9 +362,9 @@ def run_backtest(symbol: str,
         if symbol in best_params_data:
             # Use the latest best parameters for this symbol
             params = best_params_data[symbol]['best_params']
-            print(f"Using best parameters for {symbol}: {params}")
+            logger.info(f"Using best parameters for {symbol}: {params}")
         else:
-            print(
+            logger.info(
                 f"No best parameters found for {symbol}. Using default parameters."
             )
             params = get_default_params()  # Fallback to default parameters
@@ -476,13 +479,13 @@ def run_backtest(symbol: str,
                     capital_to_use = initial_capital * buy_percentage
                     shares_to_buy = capital_to_use / current_price
 
-                    print(f"\nBuy Decision:")
-                    print(f"Rank: {rank:.2f}")
-                    print(f"Buy Percentage: {buy_percentage*100:.1f}%")
-                    print(
+                    logger.info(f"\nBuy Decision:")
+                    logger.info(f"Rank: {rank:.2f}")
+                    logger.info(f"Buy Percentage: {buy_percentage*100:.1f}%")
+                    logger.info(
                         f"Current position: {position:.8f} shares at ${current_price:.2f}"
                     )
-                    print(
+                    logger.info(
                         f"Buying {shares_to_buy:.8f} shares at ${current_price:.2f}"
                     )
 
@@ -515,12 +518,12 @@ def run_backtest(symbol: str,
                             'trading_costs': total_cost - cost,
                             'total_position': position
                         })
-                        print(f"Remaining cash: ${cash:.2f}")
+                        logger.info(f"Remaining cash: ${cash:.2f}")
 
             elif signal == -1 and position > 0:  # Sell signal
-                print(f"\n{'='*80}")
-                print(f"SELL SIGNAL detected for {symbol} at {current_time}")
-                print(
+                logger.info(f"\n{'='*80}")
+                logger.info(f"SELL SIGNAL detected for {symbol} at {current_time}")
+                logger.info(
                     f"Current position: {position:.8f} shares at ${current_price:.2f}"
                 )
 
@@ -576,11 +579,11 @@ def run_backtest(symbol: str,
                     else:
                         shares_to_sell = int(shares_to_sell)
 
-                    print(f"\nSell Decision:")
-                    print(f"Performance: {performance:.2f}%")
-                    print(f"Rank: {rank:.2f}")
-                    print(f"Sell Percentage: {sell_percentage*100:.1f}%")
-                    print(
+                    logger.info(f"\nSell Decision:")
+                    logger.info(f"Performance: {performance:.2f}%")
+                    logger.info(f"Rank: {rank:.2f}")
+                    logger.info(f"Sell Percentage: {sell_percentage*100:.1f}%")
+                    logger.info(
                         f"Shares to sell: {shares_to_sell:.8f} out of {position:.8f}"
                     )
 
@@ -605,14 +608,14 @@ def run_backtest(symbol: str,
                             'performance_rank': rank,
                             'sell_percentage': sell_percentage * 100
                         })
-                        print(
+                        logger.info(
                             f"Trade executed: Sold {shares_to_sell:.8f} shares at ${current_price:.2f}"
                         )
-                        print(
+                        logger.info(
                             f"Gross value: ${gross_sale_value:.2f}, Trading costs: ${trading_costs:.2f}"
                         )
-                        print(f"Net value: ${net_sale_value:.2f}")
-                        print(f"Remaining position: {position:.8f} shares")
+                        logger.info(f"Net value: ${net_sale_value:.2f}")
+                        logger.info(f"Remaining position: {position:.8f} shares")
                 else:
                     # Fallback to selling entire position if we can't calculate ranking
                     gross_sale_value = position * current_price
@@ -632,10 +635,10 @@ def run_backtest(symbol: str,
                         'performance_rank': None,
                         'sell_percentage': 100
                     })
-                    print(
+                    logger.info(
                         "\nWARNING: Could not calculate rankings, selling entire position"
                     )
-                    print(
+                    logger.info(
                         f"Sold all {position:.8f} shares at ${current_price:.2f}"
                     )
                     position = 0
@@ -655,12 +658,12 @@ def run_backtest(symbol: str,
     total_return = ((final_value - initial_capital) / initial_capital) * 100
     
     # Debug info for return calculation
-    print(f"\nReturn calculation details:")
-    print(f"Initial capital: ${initial_capital:.2f}")
-    print(f"Final cash: ${cash:.2f}")
-    print(f"Final position: {position:.8f} shares at ${current_price:.2f} = ${position * current_price:.2f}")
-    print(f"Final portfolio value: ${final_value:.2f}")
-    print(f"Total return: {total_return:.2f}%")
+    logger.info(f"\nReturn calculation details:")
+    logger.info(f"Initial capital: ${initial_capital:.2f}")
+    logger.info(f"Final cash: ${cash:.2f}")
+    logger.info(f"Final position: {position:.8f} shares at ${current_price:.2f} = ${position * current_price:.2f}")
+    logger.info(f"Final portfolio value: ${final_value:.2f}")
+    logger.info(f"Total return: {total_return:.2f}%")
 
     # Calculate performance metrics
     if trades:
@@ -756,13 +759,13 @@ def calculate_performance_ranking(prices_dataset, current_time, lookback_days_pa
     lookback_days = lookback_days_param
     lookback_time = current_time - pd.Timedelta(days=lookback_days)
 
-    print(f"\n{'='*80}")
-    print(f"Calculating rankings at {current_time}")
-    print(f"Looking back to {lookback_time}")
-    print(
+    logger.info(f"\n{'='*80}")
+    logger.info(f"Calculating rankings at {current_time}")
+    logger.info(f"Looking back to {lookback_time}")
+    logger.info(
         f"{'Symbol':<10} {'Start Price':>12} {'End Price':>12} {'Performance':>12} {'Source':>10}"
     )
-    print(f"{'-'*10:<10} {'-'*12:>12} {'-'*12:>12} {'-'*12:>12} {'-'*10:>10}")
+    logger.info(f"{'-'*10:<10} {'-'*12:>12} {'-'*12:>12} {'-'*12:>12} {'-'*10:>10}")
 
     # Try to load best_params.json for strategy performance data
     best_params_data = {}
@@ -770,7 +773,7 @@ def calculate_performance_ranking(prices_dataset, current_time, lookback_days_pa
         with open("best_params.json", "r") as f:
             best_params_data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        print("Warning: Could not load best_params.json or file is invalid")
+        logger.info("Warning: Could not load best_params.json or file is invalid")
 
     for symbol, data in prices_dataset.items():
         try:
@@ -783,7 +786,7 @@ def calculate_performance_ranking(prices_dataset, current_time, lookback_days_pa
                 symbol_data.columns = symbol_data.columns.str.lower()
 
                 if 'close' not in symbol_data.columns:
-                    print(
+                    logger.info(
                         f"Warning: 'close' column not found for {symbol}. Available columns: {symbol_data.columns.tolist()}"
                     )
                     continue
@@ -811,11 +814,11 @@ def calculate_performance_ranking(prices_dataset, current_time, lookback_days_pa
                 # Store the final performance value
                 performance_dict[symbol] = performance
 
-                print(
+                logger.info(
                     f"{symbol:<10} {start_price:>12.2f} {end_price:>12.2f} {performance:>12.2f}% {performance_source:>10}"
                 )
         except Exception as e:
-            print(f"Error processing {symbol}: {str(e)}")
+            logger.info(f"Error processing {symbol}: {str(e)}")
             continue
 
     # Convert to DataFrame and calculate rankings
@@ -826,11 +829,11 @@ def calculate_performance_ranking(prices_dataset, current_time, lookback_days_pa
         perf_df['rank'] = perf_df['performance'].rank(
             pct=True)  # Percentile ranking
 
-        print("\nFinal Rankings:")
-        print(f"{'Symbol':<10} {'Performance':>12} {'Rank':>8}")
-        print(f"{'-'*10:<10} {'-'*12:>12} {'-'*8:>8}")
+        logger.info("\nFinal Rankings:")
+        logger.info(f"{'Symbol':<10} {'Performance':>12} {'Rank':>8}")
+        logger.info(f"{'-'*10:<10} {'-'*12:>12} {'-'*8:>8}")
         for idx in perf_df.index:
-            print(
+            logger.info(
                 f"{idx:<10} {perf_df.loc[idx, 'performance']:>12.2f}% {perf_df.loc[idx, 'rank']:>8.2f}"
             )
 
@@ -1136,9 +1139,9 @@ def run_backtest_with_export(symbol: str,
         fig.savefig(plot_path, bbox_inches='tight')
         plt.close(fig)
     
-    print(f"\nBacktest results saved to {backtest_dir}/")
-    print(f"Data: {csv_path}")
-    print(f"Plot: {plot_path}")
+    logger.info(f"\nBacktest results saved to {backtest_dir}/")
+    logger.info(f"Data: {csv_path}")
+    logger.info(f"Plot: {plot_path}")
     
     return backtest_result
 
@@ -1210,7 +1213,7 @@ if __name__ == "__main__":
     best_params = find_best_params(symbol="SPY",
                                    param_grid=param_grid,
                                    days=10)
-    print(f"Optimal Parameters: {best_params}")
+    logger.info(f"Optimal Parameters: {best_params}")
 
     # Run the final backtest with the best parameters
     final_result = run_backtest_with_export(symbol="SPY",
@@ -1218,4 +1221,4 @@ if __name__ == "__main__":
                                             params=best_params,
                                             is_simulating=False,
                                             lookback_days_param=lookback_days_param)
-    print(f"Final Backtest Results: {final_result}")
+    logger.info(f"Final Backtest Results: {final_result}")

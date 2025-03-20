@@ -65,7 +65,7 @@ lookback_days = st.sidebar.slider(
 # Update interval selection
 update_interval = st.sidebar.selectbox(
     "Update Interval",
-    [5, 15, 30, 60],
+    [55, 150, 300, 600],
     index=1  # 15 seconds default
 )
 
@@ -86,28 +86,31 @@ with st.sidebar.expander("Portfolio Simulation", expanded=True):
     if st.button("Run Full Backtest"):
         with st.spinner("Running backtest simulation... This may take a minute..."):
             try:
-                # Use the run_backtest function from backtest_individual.py
+                # Get parameter preference
+                use_best_params = st.session_state.get('use_best_params', True)
+                params = get_default_params() if not use_best_params else None
                 backtest_result = run_backtest(
                     symbol=selected_symbol, 
                     days=lookback_days,
-                    params=None,  # Use default params unless optimized
-                    is_simulating=True
+                    params=params,  # Pass default params if not using optimized ones
+                    is_simulating=True,
+                    lookback_days_param=lookback_days
                 )
 
                 if backtest_result:
                     st.success(f"Backtest complete for {selected_symbol}!")
 
                     # Display key performance metrics
-                    metrics = backtest_result.get('metrics', {})
+                    stats = backtest_result.get('stats', {})
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        st.metric("Total Return", f"{metrics.get('total_return', 0):.2f}%")
+                        st.metric("Total Return", f"{stats.get('total_return', 0):.2f}%")
                     with col2:
-                        st.metric("Max Drawdown", f"{metrics.get('max_drawdown', 0):.2f}%")
+                        st.metric("Max Drawdown", f"{stats.get('max_drawdown', 0):.2f}%")
                     with col3:
-                        st.metric("Win Rate", f"{metrics.get('win_rate', 0):.2f}%")
+                        st.metric("Win Rate", f"{stats.get('win_rate', 0):.2f}%")
                     with col4:
-                        st.metric("Sharpe Ratio", f"{metrics.get('sharpe_ratio', 0):.2f}")
+                        st.metric("Sharpe Ratio", f"{stats.get('sharpe_ratio', 0):.2f}")
 
                     # If there's a plot available in the result, display it
                     plot_data = backtest_result.get('plot_data', None)
@@ -122,7 +125,10 @@ with st.sidebar.expander("Portfolio Simulation", expanded=True):
 # Best parameters management
 with st.sidebar.expander("Parameter Management", expanded=True):
     st.text("Composite Indicator Parameters")
-    use_best_params = st.checkbox("Use Optimized Parameters", value=True)
+    # Initialize session state if needed
+    if 'use_best_params' not in st.session_state:
+        st.session_state['use_best_params'] = True
+    use_best_params = st.checkbox("Use Optimized Parameters", key='use_best_params')
 
     # Add button to optimize parameters
     if st.button("Find Best Parameters"):
@@ -343,8 +349,10 @@ def calculate_performance_ranking(prices_dataset=None, lookback_days=15):
 def update_charts():
     # Load optimal parameters if enabled
     params = None
-    if use_best_params:
+    if st.session_state.get('use_best_params', True):
         params = load_best_params(selected_symbol)
+    else:
+        params = get_default_params()
 
     # Fetch and process the data
     df, error = fetch_and_process_data(selected_symbol, timeframe, lookback_days)
