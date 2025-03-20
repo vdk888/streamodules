@@ -516,6 +516,11 @@ def update_charts():
     if signals_df is None or signals_df.empty:
         st.warning("Could not generate signals. Please try a different timeframe or lookback period.")
         return
+        
+    # Simulate portfolio early to get rank information for signals
+    portfolio_df = None
+    if enable_simulation:
+        portfolio_df = simulate_portfolio(signals_df, df, initial_capital=initial_capital)
 
     # Create price chart (without the composite indicators)
     fig1 = make_subplots(rows=1, cols=1)
@@ -537,26 +542,62 @@ def update_charts():
         # Get points where signal is 1 (buy)
         buy_signals = signals_df[signals_df['signal'] == 1]
         if not buy_signals.empty:
+            # Prepare hover text with rank information if available
+            hover_texts = []
+            for idx in buy_signals.index:
+                price = df.loc[idx, 'close']
+                rank_info = ""
+                
+                # Add rank information if portfolio simulation is enabled and we have the data
+                if portfolio_df is not None and not portfolio_df.empty and idx in portfolio_df.index:
+                    rank = portfolio_df.loc[idx, 'rank']
+                    if rank is not None:
+                        rank_info = f"<br>Rank: {int(rank)}"
+                
+                hover_texts.append(f"BUY<br>Price: ${price:.2f}{rank_info}")
+            
             fig1.add_trace(
                 go.Scatter(
                     x=buy_signals.index, 
                     y=df.loc[buy_signals.index, 'high'] * 1.01,  # Slightly above the candle
-                    mode='markers',
+                    mode='markers+text',
                     marker=dict(symbol='triangle-up', size=15, color='green'),
-                    name="Buy Signal"
+                    name="Buy Signal",
+                    text=[f"R:{int(portfolio_df.loc[idx, 'rank'])}" if portfolio_df is not None and idx in portfolio_df.index and portfolio_df.loc[idx, 'rank'] is not None else "" for idx in buy_signals.index],
+                    textposition="top center",
+                    hoverinfo="text",
+                    hovertext=hover_texts
                 )
             )
 
         # Get points where signal is -1 (sell)
         sell_signals = signals_df[signals_df['signal'] == -1]
         if not sell_signals.empty:
+            # Prepare hover text with rank information if available
+            hover_texts = []
+            for idx in sell_signals.index:
+                price = df.loc[idx, 'close']
+                rank_info = ""
+                
+                # Add rank information if portfolio simulation is enabled and we have the data
+                if portfolio_df is not None and not portfolio_df.empty and idx in portfolio_df.index:
+                    rank = portfolio_df.loc[idx, 'rank']
+                    if rank is not None:
+                        rank_info = f"<br>Rank: {int(rank)}"
+                
+                hover_texts.append(f"SELL<br>Price: ${price:.2f}{rank_info}")
+            
             fig1.add_trace(
                 go.Scatter(
                     x=sell_signals.index, 
                     y=df.loc[sell_signals.index, 'low'] * 0.99,  # Slightly below the candle
-                    mode='markers',
+                    mode='markers+text',
                     marker=dict(symbol='triangle-down', size=15, color='red'),
-                    name="Sell Signal"
+                    name="Sell Signal",
+                    text=[f"R:{int(portfolio_df.loc[idx, 'rank'])}" if portfolio_df is not None and idx in portfolio_df.index and portfolio_df.loc[idx, 'rank'] is not None else "" for idx in sell_signals.index],
+                    textposition="bottom center",
+                    hoverinfo="text",
+                    hovertext=hover_texts
                 )
             )
 
@@ -873,11 +914,19 @@ def update_charts():
                 price = df.loc[idx, 'close']
                 daily_composite = row.get('daily_composite', 'N/A')
                 weekly_composite = row.get('weekly_composite', 'N/A')
+                
+                # Add rank information if available
+                rank_display = "N/A"
+                if portfolio_df is not None and not portfolio_df.empty and idx in portfolio_df.index:
+                    rank = portfolio_df.loc[idx, 'rank']
+                    if rank is not None:
+                        rank_display = f"{int(rank)}"
 
                 signal_display.append({
                     "Time": idx.strftime("%Y-%m-%d %H:%M"),
                     "Signal": signal_type,
                     "Price": f"${price:.2f}",
+                    "Rank": rank_display,
                     "Daily Composite": f"{daily_composite:.4f}" if isinstance(daily_composite, (int, float)) else daily_composite,
                     "Weekly Composite": f"{weekly_composite:.4f}" if isinstance(weekly_composite, (int, float)) else weekly_composite
                 })
@@ -968,46 +1017,49 @@ def update_charts():
                 st.info("No signals available to simulate portfolio. Try a different timeframe or symbol.")
 
     # Add asset performance comparison
-    st.subheader("Asset Performance Comparison")
-    performance_df = calculate_performance_ranking(lookback_days=lookback_days)
+    with performance_placeholder.container():
+        st.subheader("Asset Performance Comparison")
+        performance_df = calculate_performance_ranking(lookback_days=lookback_days)
 
-    if performance_df is not None and not performance_df.empty:
-        # Create a bar chart for the performance ranking
-        fig_perf = go.Figure()
+        if performance_df is not None and not performance_df.empty:
+            # Create a bar chart for the performance ranking
+            fig_perf = go.Figure()
 
-        # Sort by performance descending
-        performance_df = performance_df.sort_values('performance', ascending=False)
+            # Sort by performance descending
+            performance_df = performance_df.sort_values('performance', ascending=False)
 
-        # Add bars
-        fig_perf.add_trace(
-            go.Bar(
-                x=performance_df.index,
-                y=performance_df['performance'],
-                marker_color=['green' if x > 0 else 'red' for x in performance_df['performance']],
-                text=[f"{x:.2f}%" for x in performance_df['performance']],
-                textposition='outside'
+            # Add bars with rank information
+            fig_perf.add_trace(
+                go.Bar(
+                    x=performance_df.index,
+                    y=performance_df['performance'],
+                    marker_color=['green' if x > 0 else 'red' for x in performance_df['performance']],
+                    text=[f"{x:.2f}%" for x in performance_df['performance']],
+                    textposition='outside',
+                    hovertext=[f"Rank: {r:.2f}" for r in performance_df['rank']],
+                    hoverinfo='text'
+                )
             )
-        )
 
-        # Update layout
-        fig_perf.update_layout(
-            title="Performance Over Selected Period",
-            yaxis_title="% Change",
-            height=400,
-            margin=dict(l=0, r=0, t=40, b=0)
-        )
+            # Update layout
+            fig_perf.update_layout(
+                title="Performance Over Selected Period",
+                yaxis_title="% Change",
+                height=400,
+                margin=dict(l=0, r=0, t=40, b=0)
+            )
 
-        # Display the performance chart
-        st.plotly_chart(fig_perf, use_container_width=True, key=f"perf_chart_{int(time.time())}")
+            # Display the performance chart
+            st.plotly_chart(fig_perf, use_container_width=True, key=f"perf_chart_{int(time.time())}")
 
-        # Display a table with more details
-        performance_df['performance'] = performance_df['performance'].apply(lambda x: f"{x:.2f}%")
-        performance_df['rank'] = performance_df['rank'].apply(lambda x: f"{x*100:.1f}%")
-        performance_df.columns = ['Performance', 'Percentile Rank']
+            # Display a table with more details
+            performance_df['performance'] = performance_df['performance'].apply(lambda x: f"{x:.2f}%")
+            performance_df['rank'] = performance_df['rank'].apply(lambda x: f"{x*100:.1f}%")
+            performance_df.columns = ['Performance', 'Percentile Rank']
 
-        st.dataframe(performance_df, use_container_width=True)
-    else:
-        st.info("Unable to calculate performance ranking. Try a different timeframe.")
+            st.dataframe(performance_df, use_container_width=True)
+        else:
+            st.info("Unable to calculate performance ranking. Try a different timeframe.")
 
     # Show last update time
     st.caption(f"Last updated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
