@@ -176,112 +176,17 @@ def update_charts():
     # Display the price chart with a timestamp-based key to avoid duplicate ID error
     price_chart_placeholder.plotly_chart(fig1, use_container_width=True, key=f"price_chart_{int(time.time())}")
     
-    # Create technical indicators chart with 6 subplots (adding daily and weekly composite)
+    # Create technical indicators chart with 6 subplots (composite indicators first)
     fig2 = make_subplots(
         rows=6, 
         cols=1, 
         shared_xaxes=True,
         vertical_spacing=0.03,
-        row_heights=[0.16, 0.16, 0.16, 0.16, 0.18, 0.18],
-        subplot_titles=("MACD", "RSI", "Stochastic", "Fractal Complexity", "Daily Composite", "Weekly Composite")
+        row_heights=[0.18, 0.18, 0.16, 0.16, 0.16, 0.16],
+        subplot_titles=("Daily Composite", "Weekly Composite", "MACD", "RSI", "Stochastic", "Fractal Complexity")
     )
     
-    # Add MACD
-    if show_macd:
-        from attached_assets.indicators import calculate_macd
-        macd = calculate_macd(df)
-        fig2.add_trace(
-            go.Scatter(
-                x=df.index, 
-                y=macd, 
-                name="MACD",
-                line=dict(color='blue', width=1)
-            ),
-            row=1, col=1
-        )
-        # Add zero line
-        fig2.add_trace(
-            go.Scatter(
-                x=[df.index[0], df.index[-1]], 
-                y=[0, 0], 
-                name="Zero Line",
-                line=dict(color='gray', width=1, dash='dash')
-            ),
-            row=1, col=1
-        )
-    
-    # Add RSI
-    if show_rsi:
-        from attached_assets.indicators import calculate_rsi
-        rsi = calculate_rsi(df)
-        fig2.add_trace(
-            go.Scatter(
-                x=df.index, 
-                y=rsi, 
-                name="RSI",
-                line=dict(color='orange', width=1)
-            ),
-            row=2, col=1
-        )
-        # Add overbought/oversold lines
-        fig2.add_trace(
-            go.Scatter(
-                x=[df.index[0], df.index[-1]], 
-                y=[70, 70], 
-                name="Overbought",
-                line=dict(color='red', width=1, dash='dash')
-            ),
-            row=2, col=1
-        )
-        fig2.add_trace(
-            go.Scatter(
-                x=[df.index[0], df.index[-1]], 
-                y=[30, 30], 
-                name="Oversold",
-                line=dict(color='green', width=1, dash='dash')
-            ),
-            row=2, col=1
-        )
-    
-    # Add Stochastic
-    if show_stochastic:
-        from attached_assets.indicators import calculate_stochastic
-        stoch = calculate_stochastic(df)
-        fig2.add_trace(
-            go.Scatter(
-                x=df.index, 
-                y=stoch, 
-                name="Stochastic",
-                line=dict(color='purple', width=1)
-            ),
-            row=3, col=1
-        )
-        # Add zero line
-        fig2.add_trace(
-            go.Scatter(
-                x=[df.index[0], df.index[-1]], 
-                y=[0, 0], 
-                name="Zero Line",
-                line=dict(color='gray', width=1, dash='dash')
-            ),
-            row=3, col=1
-        )
-    
-    # Add Fractal Complexity
-    if show_fractal:
-        from attached_assets.indicators import calculate_fractal_complexity
-        complexity = calculate_fractal_complexity(df)
-        fig2.add_trace(
-            go.Scatter(
-                x=df.index, 
-                y=complexity, 
-                name="Fractal Complexity",
-                line=dict(color='teal', width=1)
-            ),
-            row=4, col=1
-        )
-    
-    # Add Daily Composite indicator
+    # Add Daily Composite indicator first
     if not signals_df.empty and 'daily_composite' in signals_df.columns:
         # Daily composite line
         fig2.add_trace(
@@ -292,7 +197,7 @@ def update_charts():
                 name="Daily Composite",
                 line=dict(color='royalblue', width=2.5)
             ),
-            row=5, col=1
+            row=1, col=1
         )
         
         # Daily threshold lines
@@ -305,7 +210,7 @@ def update_charts():
                     name="Daily Upper Threshold",
                     line=dict(color='green', width=1.5, dash='dash')
                 ),
-                row=5, col=1
+                row=1, col=1
             )
         
         if 'daily_down_lim' in signals_df.columns:
@@ -317,7 +222,7 @@ def update_charts():
                     name="Daily Lower Threshold",
                     line=dict(color='red', width=1.5, dash='dash')
                 ),
-                row=5, col=1
+                row=1, col=1
             )
         
         # Add zero line
@@ -328,7 +233,7 @@ def update_charts():
                 name="Zero Line",
                 line=dict(color='gray', width=1, dash='dash')
             ),
-            row=5, col=1
+            row=1, col=1
         )
     
     # Add Weekly Composite indicator
@@ -342,7 +247,7 @@ def update_charts():
                 name="Weekly Composite",
                 line=dict(color='purple', width=2.5)
             ),
-            row=6, col=1
+            row=2, col=1
         )
         
         # Weekly threshold lines
@@ -355,7 +260,7 @@ def update_charts():
                     name="Weekly Upper Threshold",
                     line=dict(color='darkgreen', width=1.5, dash='dot')
                 ),
-                row=6, col=1
+                row=2, col=1
             )
         
         if 'weekly_down_lim' in signals_df.columns:
@@ -367,7 +272,7 @@ def update_charts():
                     name="Weekly Lower Threshold",
                     line=dict(color='darkred', width=1.5, dash='dot')
                 ),
-                row=6, col=1
+                row=2, col=1
             )
         
         # Add zero line
@@ -377,6 +282,101 @@ def update_charts():
                 y=[0, 0],
                 name="Zero Line",
                 line=dict(color='gray', width=1, dash='dash')
+            ),
+            row=2, col=1
+        )
+    
+    # Add MACD
+    if show_macd:
+        from attached_assets.indicators import calculate_macd
+        macd = calculate_macd(df)
+        fig2.add_trace(
+            go.Scatter(
+                x=df.index, 
+                y=macd, 
+                name="MACD",
+                line=dict(color='blue', width=1)
+            ),
+            row=3, col=1
+        )
+        # Add zero line
+        fig2.add_trace(
+            go.Scatter(
+                x=[df.index[0], df.index[-1]], 
+                y=[0, 0], 
+                name="Zero Line",
+                line=dict(color='gray', width=1, dash='dash')
+            ),
+            row=3, col=1
+        )
+    
+    # Add RSI
+    if show_rsi:
+        from attached_assets.indicators import calculate_rsi
+        rsi = calculate_rsi(df)
+        fig2.add_trace(
+            go.Scatter(
+                x=df.index, 
+                y=rsi, 
+                name="RSI",
+                line=dict(color='orange', width=1)
+            ),
+            row=4, col=1
+        )
+        # Add overbought/oversold lines
+        fig2.add_trace(
+            go.Scatter(
+                x=[df.index[0], df.index[-1]], 
+                y=[70, 70], 
+                name="Overbought",
+                line=dict(color='red', width=1, dash='dash')
+            ),
+            row=4, col=1
+        )
+        fig2.add_trace(
+            go.Scatter(
+                x=[df.index[0], df.index[-1]], 
+                y=[30, 30], 
+                name="Oversold",
+                line=dict(color='green', width=1, dash='dash')
+            ),
+            row=4, col=1
+        )
+    
+    # Add Stochastic
+    if show_stochastic:
+        from attached_assets.indicators import calculate_stochastic
+        stoch = calculate_stochastic(df)
+        fig2.add_trace(
+            go.Scatter(
+                x=df.index, 
+                y=stoch, 
+                name="Stochastic",
+                line=dict(color='purple', width=1)
+            ),
+            row=5, col=1
+        )
+        # Add zero line
+        fig2.add_trace(
+            go.Scatter(
+                x=[df.index[0], df.index[-1]], 
+                y=[0, 0], 
+                name="Zero Line",
+                line=dict(color='gray', width=1, dash='dash')
+            ),
+            row=5, col=1
+        )
+    
+    # Add Fractal Complexity
+    if show_fractal:
+        from attached_assets.indicators import calculate_fractal_complexity
+        complexity = calculate_fractal_complexity(df)
+        fig2.add_trace(
+            go.Scatter(
+                x=df.index, 
+                y=complexity, 
+                name="Fractal Complexity",
+                line=dict(color='teal', width=1)
             ),
             row=6, col=1
         )
