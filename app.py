@@ -95,22 +95,26 @@ def update_charts():
         show_signals=settings["show_signals"]
     )
 
-    # Clear the container first
-    st.session_state.chart_container.empty()
+    # Create a new chart container
+    st.session_state.chart_container = st.empty()
     
     # Update the main chart with a unique key based on symbol, timeframe and timestamp
     # Using import time at the top of file
     import time
     timestamp = int(time.time())
     unique_chart_key = f"main_chart_{settings['symbol']}_{settings['timeframe']}_{timestamp}"
-    st.session_state.chart_container.plotly_chart(main_chart, use_container_width=True, key=unique_chart_key)
+    
+    # Add the chart to the container
+    with st.session_state.chart_container:
+        st.plotly_chart(main_chart, use_container_width=True, key=unique_chart_key)
 
     # Update portfolio performance if available
     if portfolio_df is not None:
-        with st.session_state.portfolio_container.container():
-            # Clear the container first
-            st.session_state.portfolio_container.empty()
-            
+        # Create a new container for portfolio
+        st.session_state.portfolio_container = st.empty()
+        
+        # Add content to the container
+        with st.session_state.portfolio_container:
             st.subheader("Portfolio Performance")
             portfolio_chart = create_portfolio_performance_chart(portfolio_df)
             if portfolio_chart:
@@ -118,11 +122,11 @@ def update_charts():
                 unique_portfolio_key = f"portfolio_chart_{settings['symbol']}_{settings['timeframe']}_{timestamp}"
                 st.plotly_chart(portfolio_chart, use_container_width=True, key=unique_portfolio_key)
 
-        # Update metrics
-        with st.session_state.metrics_container.container():
-            # Clear the container first
-            st.session_state.metrics_container.empty()
-            
+        # Create a new metrics container
+        st.session_state.metrics_container = st.empty()
+        
+        # Add content to the metrics container
+        with st.session_state.metrics_container:
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 initial_value = portfolio_df['portfolio_value'].iloc[0]
@@ -142,10 +146,11 @@ def update_charts():
                 st.metric("Win Rate", f"{win_rate:.2f}%")
 
     # Update asset performance ranking
-    with st.session_state.ranking_container.container():
-        # Clear the container first
-        st.session_state.ranking_container.empty()
-        
+    # Create a new container for ranking
+    st.session_state.ranking_container = st.empty()
+    
+    # Add content to the ranking container
+    with st.session_state.ranking_container:
         st.subheader("Asset Performance Ranking")
         
         # Fetch ranking data
