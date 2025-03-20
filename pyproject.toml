@@ -10,6 +10,7 @@ dependencies = [
     "plotly>=6.0.1",
     "python-dateutil>=2.9.0.post0",
     "pytz>=2025.1",
+    "replit>=4.1.1",
     "streamlit>=1.43.2",
     "yfinance>=0.2.54",
 ]
