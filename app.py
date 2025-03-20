@@ -475,7 +475,9 @@ def backtest_calculate_ranking(prices_dataset, current_time, lookback_days_param
         perf_df = pd.DataFrame.from_dict(performance_dict, 
                                         orient='index', 
                                         columns=['performance'])
-        perf_df['rank'] = perf_df['performance'].rank(pct=True)  # Percentile ranking
+        # Sort by performance descending and calculate percentile rank
+            perf_df = perf_df.sort_values('performance', ascending=False)
+            perf_df['rank'] = (perf_df['performance'].rank(ascending=False) / len(perf_df)) * 100
 
         return perf_df
     return None
@@ -1072,7 +1074,41 @@ def update_charts():
 
             st.dataframe(performance_df, use_container_width=True)
         else:
-            st.info("Unable to calculate performance ranking. Try a different timeframe.")
+            st.error("Unable to calculate performance ranking. Try a different timeframe.")
+
+    # Display best parameters
+    st.subheader("Best Parameters")
+    try:
+        # Load best parameters file
+        import json
+        with open("best_params.json", "r") as f:
+            best_params_data = json.load(f)
+            
+        # Create a more readable format for display
+        display_data = []
+        for symbol, data in best_params_data.items():
+            if 'best_params' in data:
+                params = data['best_params']
+                metrics = data.get('metrics', {})
+                
+                display_data.append({
+                    "Symbol": symbol,
+                    "MACD Weight": f"{params.get('macd_weight', 'N/A'):.2f}",
+                    "RSI Weight": f"{params.get('rsi_weight', 'N/A'):.2f}",
+                    "Stoch Weight": f"{params.get('stoch_weight', 'N/A'):.2f}",
+                    "Fractal Weight": f"{params.get('fractal_weight', 'N/A'):.2f}",
+                    "Reactivity": f"{params.get('reactivity', 'N/A'):.2f}",
+                    "Performance": f"{metrics.get('performance', 'N/A'):.2f}%",
+                    "Win Rate": f"{metrics.get('win_rate', 'N/A'):.1f}%"
+                })
+                
+        if display_data:
+            st.dataframe(pd.DataFrame(display_data).set_index('Symbol'))
+        else:
+            st.info("No parameter data available")
+            
+    except Exception as e:
+        st.warning(f"Could not load best parameters: {str(e)}")
 
     # Show last update time
     st.caption(f"Last updated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
