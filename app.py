@@ -451,9 +451,7 @@ def backtest_calculate_ranking(prices_dataset, current_time, lookback_days_param
                 # Store the final performance value
                 performance_dict[symbol] = performance
                 
-                # Print symbol and performance (debug information)
-                if symbol == selected_symbol:
-                    st.write(f"Debug: {symbol} performance: {performance:.2f}%")
+                # Debug performance prints removed
         except Exception as e:
             pass
 
