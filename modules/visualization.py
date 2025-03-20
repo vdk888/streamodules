@@ -16,7 +16,7 @@ def create_price_chart(price_data: pd.DataFrame,
                       show_signals: bool = True) -> go.Figure:
     """
     Create a comprehensive price chart with indicators and signals
-    
+
     Args:
         price_data: DataFrame with price data
         signals_df: DataFrame with trading signals
@@ -28,21 +28,21 @@ def create_price_chart(price_data: pd.DataFrame,
         show_stochastic: Whether to show Stochastic indicator
         show_fractal: Whether to show Fractal Complexity indicator
         show_signals: Whether to show buy/sell signals
-        
+
     Returns:
         Plotly figure with the chart
     """
     # Calculate how many rows we need for our subplot grid
     rows = 1  # Price chart always shown
-    
+
     # Add rows for composite indicators if available
     has_daily_composite = daily_composite is not None and 'daily_composite' in daily_composite.columns
     has_weekly_composite = weekly_composite is not None and 'weekly_composite' in weekly_composite.columns
-    
+
     # Always add MACD row first if enabled
     if show_macd:
         rows += 1
-        
+
     if has_daily_composite:
         rows += 1
     if has_weekly_composite:
@@ -53,10 +53,10 @@ def create_price_chart(price_data: pd.DataFrame,
         rows += 1
     if show_fractal:
         rows += 1
-        
+
     # Create subplots with appropriate row heights
     row_heights = [0.5]  # First row is the price chart (50% of height)
-    
+
     # Adjust height per indicator row
     total_indicator_rows = rows - 1
     if total_indicator_rows == 0:
@@ -76,11 +76,11 @@ def create_price_chart(price_data: pd.DataFrame,
             height_per_indicator = 0.5 / total_indicator_rows
             for _ in range(total_indicator_rows):
                 row_heights.append(height_per_indicator)
-        
+
     # Create figure
     fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, 
                        vertical_spacing=0.02, row_heights=row_heights)
-    
+
     # Add price candlestick chart
     fig.add_trace(go.Candlestick(
         x=price_data.index,
@@ -90,7 +90,7 @@ def create_price_chart(price_data: pd.DataFrame,
         close=price_data['close'],
         name="Price"
     ), row=1, col=1)
-    
+
     # Add buy/sell signals if available
     if signals_df is not None and show_signals:
         # Make sure signals_df has the close column
@@ -99,7 +99,7 @@ def create_price_chart(price_data: pd.DataFrame,
             common_dates = signals_df.index.intersection(price_data.index)
             signals_df = signals_df.copy()  # Avoid modifying the original DataFrame
             signals_df.loc[common_dates, 'close'] = price_data.loc[common_dates, 'close']
-            
+
         # Buy signals (only if 'close' is now available)
         if 'close' in signals_df.columns:
             buy_signals = signals_df[signals_df['signal'] == 1]
@@ -111,7 +111,7 @@ def create_price_chart(price_data: pd.DataFrame,
                     marker=dict(color='green', size=10, symbol='triangle-up'),
                     name="Buy Signal"
                 ), row=1, col=1)
-            
+
             # Sell signals
             sell_signals = signals_df[signals_df['signal'] == -1]
             if not sell_signals.empty:
@@ -122,7 +122,7 @@ def create_price_chart(price_data: pd.DataFrame,
                     marker=dict(color='red', size=10, symbol='triangle-down'),
                     name="Sell Signal"
                 ), row=1, col=1)
-    
+
     # Add portfolio equity curve if available
     if portfolio_df is not None:
         # Create a secondary axis for portfolio value
@@ -134,7 +134,7 @@ def create_price_chart(price_data: pd.DataFrame,
             name="Portfolio Value",
             yaxis="y2"
         ), row=1, col=1)
-        
+
         # Update layout to include the secondary y-axis
         fig.update_layout(
             yaxis2=dict(
@@ -148,10 +148,10 @@ def create_price_chart(price_data: pd.DataFrame,
                 side="right"
             )
         )
-    
+
     # Current row counter
     current_row = 2
-    
+
     # Add Daily Composite indicator if available
     if has_daily_composite and current_row <= rows:
         # Add daily composite line
@@ -162,7 +162,7 @@ def create_price_chart(price_data: pd.DataFrame,
             line=dict(color='blue', width=1.5),
             name="Daily Composite"
         ), row=current_row, col=1)
-        
+
         # Add upper threshold
         fig.add_trace(go.Scatter(
             x=daily_composite.index,
@@ -172,7 +172,7 @@ def create_price_chart(price_data: pd.DataFrame,
             name="Upper Threshold",
             opacity=0.7
         ), row=current_row, col=1)
-        
+
         # Add lower threshold
         fig.add_trace(go.Scatter(
             x=daily_composite.index,
@@ -182,7 +182,7 @@ def create_price_chart(price_data: pd.DataFrame,
             name="Lower Threshold",
             opacity=0.7
         ), row=current_row, col=1)
-        
+
         # Add title for the subplot
         fig.update_yaxes(
             title=dict(
@@ -193,7 +193,7 @@ def create_price_chart(price_data: pd.DataFrame,
             col=1
         )
         current_row += 1
-    
+
     # Add Weekly Composite indicator if available
     if has_weekly_composite and current_row <= rows:
         # Add weekly composite line
@@ -204,7 +204,7 @@ def create_price_chart(price_data: pd.DataFrame,
             line=dict(color='purple', width=1.5),
             name="Weekly Composite"
         ), row=current_row, col=1)
-        
+
         # Add upper threshold if available
         if 'upper_threshold' in weekly_composite.columns:
             fig.add_trace(go.Scatter(
@@ -215,7 +215,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 name="Upper Threshold (Weekly)",
                 opacity=0.7
             ), row=current_row, col=1)
-        
+
         # Add lower threshold if available
         if 'lower_threshold' in weekly_composite.columns:
             fig.add_trace(go.Scatter(
@@ -226,7 +226,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 name="Lower Threshold (Weekly)",
                 opacity=0.7
             ), row=current_row, col=1)
-        
+
         # Add title for the subplot
         fig.update_yaxes(
             title=dict(
@@ -237,14 +237,14 @@ def create_price_chart(price_data: pd.DataFrame,
             col=1
         )
         current_row += 1
-    
+
     # Add MACD indicator if enabled
     if show_macd and current_row <= rows and signals_df is not None:
         # Ensure we have the necessary columns
         if 'macd' in signals_df.columns and 'macd_signal' in signals_df.columns and 'macd_hist' in signals_df.columns:
             # Create histogram colors based on values
             colors = ['green' if val >= 0 else 'red' for val in signals_df['macd_hist']]
-            
+
             # Add Histogram
             fig.add_trace(go.Bar(
                 x=signals_df.index,
@@ -253,7 +253,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 name="MACD Histogram",
                 showlegend=True
             ), row=current_row, col=1)
-            
+
             # Add MACD line
             fig.add_trace(go.Scatter(
                 x=signals_df.index,
@@ -263,7 +263,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 name="MACD",
                 showlegend=True
             ), row=current_row, col=1)
-            
+
             # Add Signal line
             fig.add_trace(go.Scatter(
                 x=signals_df.index,
@@ -273,7 +273,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 name="Signal",
                 showlegend=True
             ), row=current_row, col=1)
-            
+
             # Add title for the subplot
             fig.update_yaxes(
             title=dict(
@@ -284,7 +284,7 @@ def create_price_chart(price_data: pd.DataFrame,
             col=1
         )
             current_row += 1
-    
+
     # Add RSI indicator if enabled
     if show_rsi and current_row <= rows and signals_df is not None:
         # Ensure we have the necessary columns
@@ -297,7 +297,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 line=dict(color='purple', width=1.5),
                 name="RSI"
             ), row=current_row, col=1)
-            
+
             # Add overbought/oversold lines
             fig.add_shape(
                 type="line",
@@ -309,7 +309,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 row=current_row,
                 col=1
             )
-            
+
             fig.add_shape(
                 type="line",
                 x0=signals_df.index[0],
@@ -320,7 +320,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 row=current_row,
                 col=1
             )
-            
+
             # Add title for the subplot
             fig.update_yaxes(
             title=dict(
@@ -331,7 +331,7 @@ def create_price_chart(price_data: pd.DataFrame,
             col=1
         )
             current_row += 1
-    
+
     # Add Stochastic indicator if enabled
     if show_stochastic and current_row <= rows and signals_df is not None:
         # Ensure we have the necessary columns
@@ -344,7 +344,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 line=dict(color='blue', width=1.5),
                 name="Stoch %K"
             ), row=current_row, col=1)
-            
+
             # Add Stochastic %D line if available
             if 'stoch_d' in signals_df.columns:
                 fig.add_trace(go.Scatter(
@@ -354,7 +354,7 @@ def create_price_chart(price_data: pd.DataFrame,
                     line=dict(color='red', width=1.5),
                     name="Stoch %D"
                 ), row=current_row, col=1)
-            
+
             # Add overbought/oversold lines
             fig.add_shape(
                 type="line",
@@ -366,7 +366,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 row=current_row,
                 col=1
             )
-            
+
             fig.add_shape(
                 type="line",
                 x0=signals_df.index[0],
@@ -377,7 +377,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 row=current_row,
                 col=1
             )
-            
+
             # Add title for the subplot
             fig.update_yaxes(
             title=dict(
@@ -388,7 +388,7 @@ def create_price_chart(price_data: pd.DataFrame,
             col=1
         )
             current_row += 1
-    
+
     # Add Fractal Complexity indicator if enabled
     if show_fractal and current_row <= rows and signals_df is not None:
         # Ensure we have the necessary columns
@@ -401,7 +401,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 line=dict(color='orange', width=1.5),
                 name="Fractal"
             ), row=current_row, col=1)
-            
+
             # Add reference line at 0.5 (random walk)
             fig.add_shape(
                 type="line",
@@ -413,7 +413,7 @@ def create_price_chart(price_data: pd.DataFrame,
                 row=current_row,
                 col=1
             )
-            
+
             # Add title for the subplot
             fig.update_yaxes(
             title=dict(
@@ -423,7 +423,7 @@ def create_price_chart(price_data: pd.DataFrame,
             row=current_row,
             col=1
         )
-    
+
     # Update layout
     symbol_name = price_data.iloc[-1]['symbol'] if 'symbol' in price_data.columns else ''
     fig.update_layout(
@@ -441,37 +441,37 @@ def create_price_chart(price_data: pd.DataFrame,
         xaxis_rangeslider_visible=False,
         margin=dict(t=30, l=50, r=50, b=30)  # Add some margin
     )
-    
+
     # Set y-axis range for price chart (row 1) to fit all data plus some margin
     price_range = price_data['high'].max() - price_data['low'].min()
     y_min = price_data['low'].min() - price_range * 0.05
     y_max = price_data['high'].max() + price_range * 0.05
     fig.update_yaxes(range=[y_min, y_max], row=1, col=1)
-    
+
     return fig
 
 def create_performance_ranking_chart(performance_df: pd.DataFrame) -> go.Figure:
     """
     Create a bar chart showing performance ranking of assets
-    
+
     Args:
         performance_df: DataFrame with performance metrics
-        
+
     Returns:
         Plotly figure with the chart
     """
     if performance_df is None or performance_df.empty:
         return None
-    
+
     # Sort by performance (descending)
     df_sorted = performance_df.sort_values('performance', ascending=False)
-    
+
     # Create bar colors based on performance (green for positive, red for negative)
     colors = ['green' if val >= 0 else 'red' for val in df_sorted['performance']]
-    
+
     # Create the bar chart
     fig = go.Figure()
-    
+
     fig.add_trace(go.Bar(
         x=df_sorted.index,
         y=df_sorted['performance'] * 100,  # Convert to percentage
@@ -480,7 +480,7 @@ def create_performance_ranking_chart(performance_df: pd.DataFrame) -> go.Figure:
         textposition='auto',
         name="Performance"
     ))
-    
+
     # Update layout
     fig.update_layout(
         title="Asset Performance Ranking",
@@ -489,25 +489,25 @@ def create_performance_ranking_chart(performance_df: pd.DataFrame) -> go.Figure:
         height=400,
         margin=dict(t=30, l=50, r=50, b=50)
     )
-    
+
     return fig
 
 def create_portfolio_performance_chart(portfolio_df: pd.DataFrame) -> go.Figure:
     """
     Create a chart showing portfolio performance metrics
-    
+
     Args:
         portfolio_df: DataFrame with portfolio performance
-        
+
     Returns:
         Plotly figure with the chart
     """
     if portfolio_df is None or portfolio_df.empty:
         return None
-    
+
     # Create the figure with secondary y-axis
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    
+
     # Add portfolio value
     fig.add_trace(
         go.Scatter(
@@ -519,7 +519,7 @@ def create_portfolio_performance_chart(portfolio_df: pd.DataFrame) -> go.Figure:
         ),
         secondary_y=False
     )
-    
+
     # Add drawdown
     fig.add_trace(
         go.Scatter(
@@ -533,7 +533,7 @@ def create_portfolio_performance_chart(portfolio_df: pd.DataFrame) -> go.Figure:
         ),
         secondary_y=True
     )
-    
+
     # Update layout
     fig.update_layout(
         title="Portfolio Performance",
@@ -548,7 +548,7 @@ def create_portfolio_performance_chart(portfolio_df: pd.DataFrame) -> go.Figure:
         height=400,
         margin=dict(t=30, l=50, r=50, b=30)
     )
-    
+
     # Update y-axes titles with proper title format (not using title_text which might use titlefont internally)
     fig.update_yaxes(
         title=dict(
@@ -564,5 +564,5 @@ def create_portfolio_performance_chart(portfolio_df: pd.DataFrame) -> go.Figure:
         ), 
         secondary_y=True
     )
-    
+
     return fig
