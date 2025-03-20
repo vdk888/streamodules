@@ -380,8 +380,94 @@ price_chart_placeholder = st.empty()
 indicators_placeholder = st.empty()
 signals_placeholder = st.empty()
 portfolio_placeholder = st.empty()
+performance_placeholder = st.empty()  # Add performance chart placeholder
 
-# Calculate performance ranking for assets
+# Calculate performance ranking for assets (similar to the one in backtest_individual.py)
+def backtest_calculate_ranking(prices_dataset, current_time, lookback_days_param):
+    """
+    Calculate performance ranking of all symbols over the last N days,
+    using the same logic as in backtest_individual.py
+    
+    Args:
+        prices_dataset: Dictionary of price dataframes keyed by symbol
+        current_time: Current time to use as the reference point
+        lookback_days_param: Number of days to look back
+        
+    Returns:
+        DataFrame with performance and rank columns
+    """
+    performance_dict = {}
+    lookback_days = lookback_days_param
+    
+    # Convert current_time to pandas Timestamp if it's not already
+    if not isinstance(current_time, pd.Timestamp):
+        current_time = pd.Timestamp(current_time)
+    
+    lookback_time = current_time - pd.Timedelta(days=lookback_days)
+
+    # Try to load best_params.json for strategy performance data
+    best_params_data = {}
+    try:
+        import json
+        from datetime import datetime, timedelta
+        with open("best_params.json", "r") as f:
+            best_params_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        # Silently continue
+        pass
+
+    for symbol, data in prices_dataset.items():
+        try:
+            # Get data up until current time and within lookback period
+            mask = (data.index <= current_time) & (data.index >= lookback_time)
+            symbol_data = data[mask]
+
+            if len(symbol_data) >= 2:  # Need at least 2 points to calculate performance
+                # Make column names lowercase if they aren't already
+                if not all(col.islower() for col in symbol_data.columns):
+                    symbol_data.columns = symbol_data.columns.str.lower()
+
+                if 'close' not in symbol_data.columns:
+                    continue
+
+                # Calculate standard performance from price data
+                start_price = symbol_data['close'].iloc[0]
+                end_price = symbol_data['close'].iloc[-1]
+                performance = ((end_price - start_price) / start_price) * 100
+                
+                # Check if we should use strategy performance instead
+                if symbol in best_params_data:
+                    symbol_entry = best_params_data[symbol]
+                    
+                    # Check if entry is recent (less than a week old)
+                    if 'date' in symbol_entry:
+                        entry_date = datetime.strptime(symbol_entry['date'], "%Y-%m-%d")
+                        is_recent = (datetime.now() - entry_date) < timedelta(weeks=1)
+                        
+                        # Use strategy performance if entry is recent and has performance data
+                        if is_recent and 'metrics' in symbol_entry and 'performance' in symbol_entry['metrics']:
+                            performance = symbol_entry['metrics']['performance']
+
+                # Store the final performance value
+                performance_dict[symbol] = performance
+                
+                # Print symbol and performance (debug information)
+                if symbol == selected_symbol:
+                    st.write(f"Debug: {symbol} performance: {performance:.2f}%")
+        except Exception as e:
+            pass
+
+    # Convert to DataFrame and calculate rankings
+    if performance_dict:
+        perf_df = pd.DataFrame.from_dict(performance_dict, 
+                                        orient='index', 
+                                        columns=['performance'])
+        perf_df['rank'] = perf_df['performance'].rank(pct=True)  # Percentile ranking
+        
+        return perf_df
+    return None
+
+# Original calculation for performance ranking display
 def calculate_performance_ranking(prices_dataset=None, lookback_days=15):
     """Calculate simple performance ranking across assets for display"""
     if prices_dataset is None:
@@ -400,29 +486,10 @@ def calculate_performance_ranking(prices_dataset=None, lookback_days=15):
             except Exception as e:
                 st.warning(f"Error fetching data for {symbol}: {str(e)}")
 
-    # Calculate performance for each asset
-    performance_dict = {}
-    for symbol, data in prices_dataset.items():
-        try:
-            if len(data) >= 2:
-                # Make column names lowercase if they aren't already
-                if data.columns[0].isupper():
-                    data.columns = data.columns.str.lower()
-
-                start_price = data['close'].iloc[0]
-                end_price = data['close'].iloc[-1]
-                performance = ((end_price - start_price) / start_price) * 100
-                performance_dict[symbol] = performance
-        except Exception as e:
-            st.warning(f"Error calculating performance for {symbol}: {str(e)}")
-
-    # Convert to DataFrame and calculate rankings
-    if performance_dict:
-        perf_df = pd.DataFrame.from_dict(performance_dict, 
-                                        orient='index', 
-                                        columns=['performance'])
-        perf_df['rank'] = perf_df['performance'].rank(method='dense', pct=True)
-        return perf_df
+    # Use the backtest ranking function to calculate rankings
+    if prices_dataset:
+        return backtest_calculate_ranking(prices_dataset, pd.Timestamp.now(), lookback_days)
+    
     return None
 
 # Function to update the charts
