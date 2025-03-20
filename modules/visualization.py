@@ -39,11 +39,13 @@ def create_price_chart(price_data: pd.DataFrame,
     has_daily_composite = daily_composite is not None and 'daily_composite' in daily_composite.columns
     has_weekly_composite = weekly_composite is not None and 'weekly_composite' in weekly_composite.columns
     
+    # Always add MACD row first if enabled
+    if show_macd:
+        rows += 1
+        
     if has_daily_composite:
         rows += 1
     if has_weekly_composite:
-        rows += 1
-    if show_macd:
         rows += 1
     if show_rsi:
         rows += 1
@@ -53,7 +55,7 @@ def create_price_chart(price_data: pd.DataFrame,
         rows += 1
         
     # Create subplots with appropriate row heights
-    row_heights = [0.35]  # First row is the price chart (35% of height)
+    row_heights = [0.5]  # First row is the price chart (50% of height)
     
     # Adjust height per indicator row
     total_indicator_rows = rows - 1
@@ -61,10 +63,19 @@ def create_price_chart(price_data: pd.DataFrame,
         # If no indicator rows, just use the full height for price chart
         row_heights = [1.0]
     else:
-        # Distribute remaining 65% height among indicator rows
-        height_per_indicator = 0.65 / total_indicator_rows
-        for _ in range(total_indicator_rows):
-            row_heights.append(height_per_indicator)
+        # Give MACD more height if enabled
+        if show_macd:
+            row_heights.append(0.2)  # 20% for MACD
+            remaining_rows = total_indicator_rows - 1
+            if remaining_rows > 0:
+                height_per_indicator = 0.3 / remaining_rows  # Distribute remaining 30%
+                for _ in range(remaining_rows):
+                    row_heights.append(height_per_indicator)
+        else:
+            # Distribute remaining 50% height among indicator rows
+            height_per_indicator = 0.5 / total_indicator_rows
+            for _ in range(total_indicator_rows):
+                row_heights.append(height_per_indicator)
         
     # Create figure
     fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, 
