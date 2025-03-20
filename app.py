@@ -219,19 +219,22 @@ def load_best_params(symbol):
                         return None
                 except Exception as e:
                     st.warning(f"Error accessing Replit Object Storage: {str(e)}. Falling back to local file.")
+                    
+                    # Fallback to local file if needed
+                    try:
+                        with open(best_params_file, "r") as f:
+                            best_params_data = json.load(f)
+                            st.info("Loaded parameters from local file as fallback")
 
-        # Fallback to local file if needed
-        try:
-            with open(best_params_file, "r") as f:
-                best_params_data = json.load(f)
-                st.info("Loaded parameters from local file as fallback")
-
-                if symbol in best_params_data:
-                    params = best_params_data[symbol]['best_params']
-                    return params
-                else:
-                    st.warning(f"No optimized parameters found for {symbol}. Using defaults.")
-                    return None
+                            if symbol in best_params_data:
+                                params = best_params_data[symbol]['best_params']
+                                return params
+                            else:
+                                st.warning(f"No optimized parameters found for {symbol}. Using defaults.")
+                                return None
+                    except FileNotFoundError:
+                        st.warning("Best parameters file not found. Using defaults.")
+                        return None
         except FileNotFoundError:
             st.warning("Best parameters file not found. Using defaults.")
             return None
