@@ -32,313 +32,304 @@ def create_price_chart(price_data: pd.DataFrame,
     Returns:
         Plotly figure with the chart
     """
-    # Determine number of rows needed for subplot
-    num_indicator_rows = sum([show_macd, show_rsi, show_stochastic, show_fractal])
-    if portfolio_df is not None:
-        num_indicator_rows += 1
-    
-    # Create subplot with price chart and indicators
-    fig = make_subplots(
-        rows=1 + num_indicator_rows,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.05,
-        row_heights=[0.5] + [0.5 / num_indicator_rows] * num_indicator_rows if num_indicator_rows > 0 else [1]
-    )
-    
-    # Add price candles to the chart
-    fig.add_trace(
-        go.Candlestick(
-            x=price_data.index,
-            open=price_data['open'],
-            high=price_data['high'],
-            low=price_data['low'],
-            close=price_data['close'],
-            name="Price"
-        ),
-        row=1, col=1
-    )
-    
-    # Add volume as bar chart on price chart
-    fig.add_trace(
-        go.Bar(
-            x=price_data.index,
-            y=price_data['volume'],
-            name="Volume",
-            marker_color='rgba(0,0,0,0.2)',
-            opacity=0.3
-        ),
-        row=1, col=1
-    )
-    
-    # Add daily composite indicator to price chart if available
-    if daily_composite is not None:
-        # Plot the daily composite indicator
-        fig.add_trace(
-            go.Scatter(
-                x=daily_composite.index,
-                y=daily_composite['daily_composite'],
-                name="Daily Composite",
-                line=dict(color='purple', width=1.5)
-            ),
-            row=1, col=1
-        )
+    # Calculate how many rows we need for our subplot grid
+    rows = 1  # Price chart always shown
+    if show_macd:
+        rows += 1
+    if show_rsi:
+        rows += 1
+    if show_stochastic:
+        rows += 1
+    if show_fractal:
+        rows += 1
         
-        # Add threshold bands
-        fig.add_trace(
-            go.Scatter(
-                x=daily_composite.index,
-                y=daily_composite['upper_threshold'],
-                name="Upper Threshold",
-                line=dict(color='green', width=1, dash='dash'),
-                opacity=0.5
-            ),
-            row=1, col=1
-        )
+    # Create subplots with appropriate row heights
+    row_heights = [0.6]  # First row is the price chart (60% of height)
+    for _ in range(rows - 1):
+        row_heights.append(0.4 / (rows - 1))  # Remaining rows share 40% of height equally
         
-        fig.add_trace(
-            go.Scatter(
-                x=daily_composite.index,
-                y=daily_composite['lower_threshold'],
-                name="Lower Threshold",
-                line=dict(color='red', width=1, dash='dash'),
-                opacity=0.5
-            ),
-            row=1, col=1
-        )
+    # Create figure
+    fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, 
+                       vertical_spacing=0.02, row_heights=row_heights)
     
-    # Add weekly composite indicator if available
-    if weekly_composite is not None:
-        fig.add_trace(
-            go.Scatter(
-                x=weekly_composite.index,
-                y=weekly_composite['weekly_composite'],
-                name="Weekly Composite",
-                line=dict(color='blue', width=2)
-            ),
-            row=1, col=1
-        )
-        
-        # Add threshold bands
-        fig.add_trace(
-            go.Scatter(
-                x=weekly_composite.index,
-                y=weekly_composite['upper_threshold'],
-                name="Weekly Upper",
-                line=dict(color='green', width=1.5, dash='dash'),
-                opacity=0.7
-            ),
-            row=1, col=1
-        )
-        
-        fig.add_trace(
-            go.Scatter(
-                x=weekly_composite.index,
-                y=weekly_composite['lower_threshold'],
-                name="Weekly Lower",
-                line=dict(color='red', width=1.5, dash='dash'),
-                opacity=0.7
-            ),
-            row=1, col=1
-        )
+    # Add price candlestick chart
+    fig.add_trace(go.Candlestick(
+        x=price_data.index,
+        open=price_data['open'],
+        high=price_data['high'],
+        low=price_data['low'],
+        close=price_data['close'],
+        name="Price"
+    ), row=1, col=1)
     
-    # Add buy/sell signals if requested and available
-    if show_signals and signals_df is not None:
-        # Buy signals (green triangles)
+    # Add daily and weekly composite bands if available
+    if daily_composite is not None and 'daily_composite' in daily_composite.columns:
+        # Add daily composite line
+        fig.add_trace(go.Scatter(
+            x=daily_composite.index,
+            y=daily_composite['daily_composite'],
+            mode='lines',
+            line=dict(color='blue', width=1.5),
+            name="Daily Composite"
+        ), row=1, col=1)
+        
+        # Add upper threshold
+        fig.add_trace(go.Scatter(
+            x=daily_composite.index,
+            y=daily_composite['upper_threshold'],
+            mode='lines',
+            line=dict(color='green', width=1, dash='dot'),
+            name="Upper Threshold",
+            opacity=0.7
+        ), row=1, col=1)
+        
+        # Add lower threshold
+        fig.add_trace(go.Scatter(
+            x=daily_composite.index,
+            y=daily_composite['lower_threshold'],
+            mode='lines',
+            line=dict(color='red', width=1, dash='dot'),
+            name="Lower Threshold",
+            opacity=0.7
+        ), row=1, col=1)
+    
+    if weekly_composite is not None and 'weekly_composite' in weekly_composite.columns:
+        # Add weekly composite line
+        fig.add_trace(go.Scatter(
+            x=weekly_composite.index,
+            y=weekly_composite['weekly_composite'],
+            mode='lines',
+            line=dict(color='purple', width=2),
+            name="Weekly Composite"
+        ), row=1, col=1)
+    
+    # Add buy/sell signals if available
+    if signals_df is not None and show_signals:
+        # Buy signals
         buy_signals = signals_df[signals_df['signal'] == 1]
         if not buy_signals.empty:
-            fig.add_trace(
-                go.Scatter(
-                    x=buy_signals.index,
-                    y=price_data.loc[buy_signals.index, 'low'] * 0.99,  # Slightly below price
-                    mode='markers',
-                    marker=dict(symbol='triangle-up', size=12, color='green'),
-                    name="Buy Signal"
-                ),
-                row=1, col=1
-            )
+            fig.add_trace(go.Scatter(
+                x=buy_signals.index,
+                y=buy_signals['close'] * 0.99,  # Place markers slightly below the close price
+                mode='markers',
+                marker=dict(color='green', size=10, symbol='triangle-up'),
+                name="Buy Signal"
+            ), row=1, col=1)
         
-        # Sell signals (red triangles)
+        # Sell signals
         sell_signals = signals_df[signals_df['signal'] == -1]
         if not sell_signals.empty:
-            fig.add_trace(
-                go.Scatter(
-                    x=sell_signals.index,
-                    y=price_data.loc[sell_signals.index, 'high'] * 1.01,  # Slightly above price
-                    mode='markers',
-                    marker=dict(symbol='triangle-down', size=12, color='red'),
-                    name="Sell Signal"
-                ),
-                row=1, col=1
-            )
+            fig.add_trace(go.Scatter(
+                x=sell_signals.index,
+                y=sell_signals['close'] * 1.01,  # Place markers slightly above the close price
+                mode='markers',
+                marker=dict(color='red', size=10, symbol='triangle-down'),
+                name="Sell Signal"
+            ), row=1, col=1)
     
-    # Current row index for adding indicators
+    # Add portfolio equity curve if available
+    if portfolio_df is not None:
+        # Create a secondary axis for portfolio value
+        fig.add_trace(go.Scatter(
+            x=portfolio_df.index,
+            y=portfolio_df['portfolio_value'],
+            mode='lines',
+            line=dict(color='black', width=1.5),
+            name="Portfolio Value",
+            yaxis="y2"
+        ), row=1, col=1)
+        
+        # Add a secondary y-axis for portfolio value
+        fig.update_layout(
+            yaxis2=dict(
+                title="Portfolio Value ($)",
+                overlaying="y",
+                side="right",
+                showgrid=False
+            )
+        )
+    
+    # Current row counter
     current_row = 2
     
-    # Add MACD indicator if requested
-    if show_macd and 'macd' in price_data.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=price_data.index,
-                y=price_data['macd'],
-                name="MACD",
-                line=dict(color='blue', width=1.5)
-            ),
-            row=current_row, col=1
-        )
-        
-        fig.add_trace(
-            go.Scatter(
-                x=price_data.index,
-                y=price_data['macd_signal'],
-                name="MACD Signal",
-                line=dict(color='red', width=1)
-            ),
-            row=current_row, col=1
-        )
-        
-        fig.add_trace(
-            go.Bar(
-                x=price_data.index,
-                y=price_data['macd_hist'],
-                name="MACD Histogram",
-                marker_color=np.where(price_data['macd_hist'] >= 0, 'green', 'red')
-            ),
-            row=current_row, col=1
-        )
-        
-        # Update y-axis title for MACD
-        fig.update_yaxes(title_text="MACD", row=current_row, col=1)
-        current_row += 1
+    # Add MACD indicator if enabled
+    if show_macd and current_row <= rows:
+        # Ensure we have the necessary columns
+        if signals_df is not None and 'macd' in signals_df.columns:
+            # Add MACD line
+            fig.add_trace(go.Scatter(
+                x=signals_df.index,
+                y=signals_df['macd'],
+                mode='lines',
+                line=dict(color='blue', width=1.5),
+                name="MACD"
+            ), row=current_row, col=1)
+            
+            # Add Signal line
+            if 'macd_signal' in signals_df.columns:
+                fig.add_trace(go.Scatter(
+                    x=signals_df.index,
+                    y=signals_df['macd_signal'],
+                    mode='lines',
+                    line=dict(color='red', width=1.5),
+                    name="Signal"
+                ), row=current_row, col=1)
+            
+            # Add Histogram
+            if 'macd_hist' in signals_df.columns:
+                # Create histogram colors based on values
+                colors = ['green' if val >= 0 else 'red' for val in signals_df['macd_hist']]
+                
+                fig.add_trace(go.Bar(
+                    x=signals_df.index,
+                    y=signals_df['macd_hist'],
+                    marker_color=colors,
+                    name="MACD Histogram"
+                ), row=current_row, col=1)
+            
+            # Add title for the subplot
+            fig.update_yaxes(title_text="MACD", row=current_row, col=1)
+            current_row += 1
     
-    # Add RSI indicator if requested
-    if show_rsi and 'rsi' in price_data.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=price_data.index,
-                y=price_data['rsi'],
-                name="RSI",
-                line=dict(color='purple', width=1.5)
-            ),
-            row=current_row, col=1
-        )
-        
-        # Add overbought/oversold lines
-        fig.add_trace(
-            go.Scatter(
-                x=price_data.index,
-                y=[70] * len(price_data),
-                name="Overbought",
-                line=dict(color='red', width=1, dash='dash')
-            ),
-            row=current_row, col=1
-        )
-        
-        fig.add_trace(
-            go.Scatter(
-                x=price_data.index,
-                y=[30] * len(price_data),
-                name="Oversold",
-                line=dict(color='green', width=1, dash='dash')
-            ),
-            row=current_row, col=1
-        )
-        
-        # Update y-axis title for RSI
-        fig.update_yaxes(title_text="RSI", row=current_row, col=1)
-        current_row += 1
+    # Add RSI indicator if enabled
+    if show_rsi and current_row <= rows:
+        # Ensure we have the necessary columns
+        if signals_df is not None and 'rsi' in signals_df.columns:
+            # Add RSI line
+            fig.add_trace(go.Scatter(
+                x=signals_df.index,
+                y=signals_df['rsi'],
+                mode='lines',
+                line=dict(color='purple', width=1.5),
+                name="RSI"
+            ), row=current_row, col=1)
+            
+            # Add overbought/oversold lines
+            fig.add_shape(
+                type="line",
+                x0=signals_df.index[0],
+                x1=signals_df.index[-1],
+                y0=70,
+                y1=70,
+                line=dict(color="red", width=1, dash="dash"),
+                row=current_row,
+                col=1
+            )
+            
+            fig.add_shape(
+                type="line",
+                x0=signals_df.index[0],
+                x1=signals_df.index[-1],
+                y0=30,
+                y1=30,
+                line=dict(color="green", width=1, dash="dash"),
+                row=current_row,
+                col=1
+            )
+            
+            # Add title for the subplot
+            fig.update_yaxes(title_text="RSI", row=current_row, col=1)
+            current_row += 1
     
-    # Add Stochastic indicator if requested
-    if show_stochastic and 'stoch_k' in price_data.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=price_data.index,
-                y=price_data['stoch_k'],
-                name="%K",
-                line=dict(color='blue', width=1.5)
-            ),
-            row=current_row, col=1
-        )
-        
-        fig.add_trace(
-            go.Scatter(
-                x=price_data.index,
-                y=price_data['stoch_d'],
-                name="%D",
-                line=dict(color='red', width=1)
-            ),
-            row=current_row, col=1
-        )
-        
-        # Add overbought/oversold lines
-        fig.add_trace(
-            go.Scatter(
-                x=price_data.index,
-                y=[80] * len(price_data),
-                name="Overbought",
-                line=dict(color='red', width=1, dash='dash')
-            ),
-            row=current_row, col=1
-        )
-        
-        fig.add_trace(
-            go.Scatter(
-                x=price_data.index,
-                y=[20] * len(price_data),
-                name="Oversold",
-                line=dict(color='green', width=1, dash='dash')
-            ),
-            row=current_row, col=1
-        )
-        
-        # Update y-axis title for Stochastic
-        fig.update_yaxes(title_text="Stochastic", row=current_row, col=1)
-        current_row += 1
+    # Add Stochastic indicator if enabled
+    if show_stochastic and current_row <= rows:
+        # Ensure we have the necessary columns
+        if signals_df is not None and 'stoch_k' in signals_df.columns:
+            # Add Stochastic %K line
+            fig.add_trace(go.Scatter(
+                x=signals_df.index,
+                y=signals_df['stoch_k'],
+                mode='lines',
+                line=dict(color='blue', width=1.5),
+                name="Stoch %K"
+            ), row=current_row, col=1)
+            
+            # Add Stochastic %D line if available
+            if 'stoch_d' in signals_df.columns:
+                fig.add_trace(go.Scatter(
+                    x=signals_df.index,
+                    y=signals_df['stoch_d'],
+                    mode='lines',
+                    line=dict(color='red', width=1.5),
+                    name="Stoch %D"
+                ), row=current_row, col=1)
+            
+            # Add overbought/oversold lines
+            fig.add_shape(
+                type="line",
+                x0=signals_df.index[0],
+                x1=signals_df.index[-1],
+                y0=80,
+                y1=80,
+                line=dict(color="red", width=1, dash="dash"),
+                row=current_row,
+                col=1
+            )
+            
+            fig.add_shape(
+                type="line",
+                x0=signals_df.index[0],
+                x1=signals_df.index[-1],
+                y0=20,
+                y1=20,
+                line=dict(color="green", width=1, dash="dash"),
+                row=current_row,
+                col=1
+            )
+            
+            # Add title for the subplot
+            fig.update_yaxes(title_text="Stochastic", row=current_row, col=1)
+            current_row += 1
     
-    # Add Fractal Complexity indicator if requested
-    if show_fractal and 'fractal_complexity' in price_data.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=price_data.index,
-                y=price_data['fractal_complexity'],
-                name="Fractal Complexity",
-                line=dict(color='orange', width=1.5)
-            ),
-            row=current_row, col=1
-        )
-        
-        # Update y-axis title for Fractal Complexity
-        fig.update_yaxes(title_text="Fractal", row=current_row, col=1)
-        current_row += 1
-    
-    # Add portfolio performance if available
-    if portfolio_df is not None:
-        fig.add_trace(
-            go.Scatter(
-                x=portfolio_df.index,
-                y=portfolio_df['portfolio_value'],
-                name="Portfolio Value",
-                line=dict(color='green', width=1.5)
-            ),
-            row=current_row, col=1
-        )
-        
-        # Update y-axis title for Portfolio
-        fig.update_yaxes(title_text="Portfolio $", row=current_row, col=1)
+    # Add Fractal Complexity indicator if enabled
+    if show_fractal and current_row <= rows:
+        # Ensure we have the necessary columns
+        if signals_df is not None and 'fractal' in signals_df.columns:
+            # Add Fractal line
+            fig.add_trace(go.Scatter(
+                x=signals_df.index,
+                y=signals_df['fractal'],
+                mode='lines',
+                line=dict(color='orange', width=1.5),
+                name="Fractal"
+            ), row=current_row, col=1)
+            
+            # Add reference line at 0.5 (random walk)
+            fig.add_shape(
+                type="line",
+                x0=signals_df.index[0],
+                x1=signals_df.index[-1],
+                y0=0.5,
+                y1=0.5,
+                line=dict(color="black", width=1, dash="dash"),
+                row=current_row,
+                col=1
+            )
+            
+            # Add title for the subplot
+            fig.update_yaxes(title_text="Fractal Complexity", row=current_row, col=1)
     
     # Update layout
     fig.update_layout(
-        title="Price Chart with Technical Indicators",
+        title=f"{price_data.iloc[-1]['symbol'] if 'symbol' in price_data.columns else ''} Price Chart with Indicators",
         xaxis_title="Date",
         yaxis_title="Price",
-        height=900,  # Adjust height based on number of indicators
-        xaxis_rangeslider_visible=False,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-        margin=dict(l=50, r=50, t=100, b=50),
+        height=rows * 200,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        xaxis_rangeslider_visible=False
     )
     
-    # Hide duplicate legend entries
-    fig.update_layout(showlegend=True)
+    # Set y-axis range for price chart (row 1) to fit all data plus some margin
+    price_range = price_data['high'].max() - price_data['low'].min()
+    y_min = price_data['low'].min() - price_range * 0.05
+    y_max = price_data['high'].max() + price_range * 0.05
+    fig.update_yaxes(range=[y_min, y_max], row=1, col=1)
     
     return fig
 
@@ -356,29 +347,31 @@ def create_performance_ranking_chart(performance_df: pd.DataFrame) -> go.Figure:
         return None
     
     # Sort by performance
-    sorted_df = performance_df.sort_values('performance', ascending=False)
+    sorted_df = performance_df.sort_values(by='performance', ascending=False)
     
-    # Create horizontal bar chart
+    # Create colors based on performance (green for positive, red for negative)
+    colors = ['green' if perf >= 0 else 'red' for perf in sorted_df['performance']]
+    
+    # Create figure
     fig = go.Figure()
     
-    # Add bars for each asset
-    fig.add_trace(
-        go.Bar(
-            y=sorted_df.index,
-            x=sorted_df['performance'] * 100,  # Convert to percentage
-            orientation='h',
-            marker_color=['green' if x >= 0 else 'red' for x in sorted_df['performance']],
-            name="Performance"
-        )
-    )
+    # Add bars for performance
+    fig.add_trace(go.Bar(
+        x=sorted_df.index,
+        y=sorted_df['performance'] * 100,  # Convert to percentage
+        marker_color=colors,
+        text=[f"{perf:.2f}%" for perf in sorted_df['performance'] * 100],
+        textposition='auto',
+        name="Performance"
+    ))
     
     # Update layout
     fig.update_layout(
-        title="Asset Performance Ranking (%)",
-        xaxis_title="Performance (%)",
-        yaxis_title="Asset",
+        title="Asset Performance Ranking",
+        xaxis_title="Symbol",
+        yaxis_title="Performance (%)",
         height=400,
-        margin=dict(l=50, r=50, t=100, b=50),
+        template="plotly_white"
     )
     
     return fig
@@ -396,74 +389,77 @@ def create_portfolio_performance_chart(portfolio_df: pd.DataFrame) -> go.Figure:
     if portfolio_df is None or portfolio_df.empty:
         return None
     
-    # Create subplot with price, portfolio value, and drawdown
-    fig = make_subplots(
-        rows=3,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.05,
-        row_heights=[0.5, 0.3, 0.2]
-    )
+    # Create figure with secondary y-axis
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # Add price chart
-    fig.add_trace(
-        go.Scatter(
-            x=portfolio_df.index,
-            y=portfolio_df['price'],
-            name="Asset Price",
-            line=dict(color='blue', width=1)
-        ),
-        row=1, col=1
-    )
-    
-    # Add portfolio value
+    # Add portfolio value trace
     fig.add_trace(
         go.Scatter(
             x=portfolio_df.index,
             y=portfolio_df['portfolio_value'],
+            mode='lines',
             name="Portfolio Value",
-            line=dict(color='green', width=1.5)
+            line=dict(color='blue', width=2)
         ),
-        row=2, col=1
+        secondary_y=False
     )
     
-    # Initial capital reference line
-    if 'portfolio_value' in portfolio_df.columns and not portfolio_df.empty:
-        initial_capital = portfolio_df['portfolio_value'].iloc[0]
+    # Add drawdown trace on secondary axis
+    if 'drawdown' in portfolio_df.columns:
         fig.add_trace(
             go.Scatter(
                 x=portfolio_df.index,
-                y=[initial_capital] * len(portfolio_df),
-                name="Initial Capital",
-                line=dict(color='gray', width=1, dash='dash')
+                y=portfolio_df['drawdown'] * 100,  # Convert to percentage
+                mode='lines',
+                name="Drawdown",
+                line=dict(color='red', width=1.5)
             ),
-            row=2, col=1
+            secondary_y=True
         )
     
-    # Add drawdown
-    fig.add_trace(
-        go.Scatter(
-            x=portfolio_df.index,
-            y=portfolio_df['drawdown'] * 100,  # Convert to percentage
-            name="Drawdown",
-            fill='tozeroy',
-            line=dict(color='red', width=1)
-        ),
-        row=3, col=1
-    )
+    # Add portfolio cash trace
+    if 'cash' in portfolio_df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=portfolio_df.index,
+                y=portfolio_df['cash'],
+                mode='lines',
+                name="Cash",
+                line=dict(color='green', width=1.5, dash='dot')
+            ),
+            secondary_y=False
+        )
+    
+    # Add position value trace
+    if 'position_value' in portfolio_df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=portfolio_df.index,
+                y=portfolio_df['position_value'],
+                mode='lines',
+                name="Position Value",
+                line=dict(color='orange', width=1.5, dash='dot')
+            ),
+            secondary_y=False
+        )
     
     # Update layout
     fig.update_layout(
-        title="Portfolio Performance",
+        title="Portfolio Performance Over Time",
         xaxis_title="Date",
-        height=700,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-        margin=dict(l=50, r=50, t=100, b=50),
+        height=400,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        template="plotly_white"
     )
     
-    # Update y-axis titles
-    fig.update_yaxes(title_text="Price", row=1, col=1)
-    fig.update_yaxes(title_text="Portfolio Value ($)", row=2, col=1)
-    fig.update_yaxes(title_text="Drawdown (%)", row=3, col=1)
+    # Set y-axes titles
+    fig.update_yaxes(title_text="Value ($)", secondary_y=False)
+    fig.update_yaxes(title_text="Drawdown (%)", secondary_y=True)
     
     return fig

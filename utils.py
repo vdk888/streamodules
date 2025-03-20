@@ -72,12 +72,13 @@ def fetch_and_process_data(symbol: str, timeframe: str, lookback_days: int) -> T
         logger.error(traceback.format_exc())
         return None, error_msg
 
-def generate_signals_with_indicators(data: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+def generate_signals_with_indicators(data: pd.DataFrame, params: Optional[Dict] = None) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[pd.DataFrame]]:
     """
     Generate signals and indicators for the given data.
 
     Args:
         data: DataFrame with OHLCV data
+        params: Optional parameters for signal generation, uses defaults if None
 
     Returns:
         Tuple containing signals DataFrame, daily data, and weekly data
@@ -87,8 +88,9 @@ def generate_signals_with_indicators(data: pd.DataFrame) -> Tuple[Optional[pd.Da
             logger.error("No data available for signal generation")
             return None, None, None
 
-        # Get default parameters
-        params = get_default_params()
+        # Use provided parameters or get defaults
+        if params is None:
+            params = get_default_params()
 
         # Use the generate_signals function from indicators.py
         signals, daily_data, weekly_data = generate_signals(data, params)

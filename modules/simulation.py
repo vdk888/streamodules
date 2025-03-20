@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, Optional, List, Tuple
 import datetime
+from typing import Dict, Optional, List, Tuple
 
 def calculate_buy_percentage(rank: int, total_assets: int) -> float:
     """
@@ -11,19 +11,15 @@ def calculate_buy_percentage(rank: int, total_assets: int) -> float:
     Returns:
         float between 0.0 and 0.5 representing buy percentage
     """
-    # Calculate cutoff points
-    bottom_third = int(total_assets * (1 / 3))
-    top_two_thirds = total_assets - bottom_third
+    # For best performing asset (rank 1), we want to allocate more capital
+    # For worst performing asset (rank = total_assets), we want to allocate less
     
-    # If in bottom third, buy 0%
-    if rank > top_two_thirds:
-        return 0.0
-    
-    # For top two-thirds, use inverted wave function
-    x = (rank - 1) / (top_two_thirds - 1)
-    wave = 0.02 * np.sin(2 * np.pi * x)  # Smaller oscillation
-    linear = 0.48 - 0.48 * x  # Linear decrease from 0.48 to 0.0
-    return max(0.0, min(0.5, linear + wave))  # Clamp between 0.0 and 0.5
+    if rank <= 3:  # Top 3 performers get higher allocation
+        return 0.2 - ((rank - 1) * 0.05)  # 0.2, 0.15, 0.1
+    elif rank <= 5:  # Next 2 performers get medium allocation
+        return 0.075
+    else:  # Rest get lower allocation
+        return 0.05
 
 def calculate_sell_percentage(rank: int, total_assets: int) -> float:
     """
@@ -33,19 +29,17 @@ def calculate_sell_percentage(rank: int, total_assets: int) -> float:
     Returns:
         float between 0.1 and 1.0 representing sell percentage
     """
-    # Calculate cutoff points
-    bottom_third = int(total_assets * (1 / 3))
-    top_two_thirds = total_assets - bottom_third
+    # For worst performing assets (higher rank), we want to sell more
+    # For best performing assets (lower rank), we want to hold more
     
-    # If in bottom third, sell 100%
-    if rank > top_two_thirds:
-        return 1.0
+    # Calculate normalized rank (0 to 1)
+    normalized_rank = (rank - 1) / (total_assets - 1) if total_assets > 1 else 0
     
-    # For top two-thirds, use a wave function
-    x = (rank - 1) / (top_two_thirds - 1)
-    wave = 0.1 * np.sin(2 * np.pi * x)  # Oscillation between -0.1 and 0.1
-    linear = 0.3 + 0.7 * x  # Linear increase from 0.3 to 1.0
-    return max(0.1, min(1.0, linear + wave))  # Clamp between 0.1 and 1.0
+    # Lower performers (higher normalized rank) get higher sell percentage
+    # Map normalized rank 0->0.1, 1->1.0
+    sell_percentage = 0.1 + (0.9 * normalized_rank)
+    
+    return sell_percentage
 
 def simulate_portfolio(signals_df: pd.DataFrame, 
                       price_data: pd.DataFrame, 
@@ -67,96 +61,112 @@ def simulate_portfolio(signals_df: pd.DataFrame,
     Returns:
         DataFrame with portfolio performance
     """
-    from modules.data import calculate_performance_ranking
-    
     if signals_df is None or signals_df.empty:
         return None
     
-    # Initialize portfolio tracking
-    position = 0  # Current position in shares
-    cash = initial_capital
-    portfolio_value = []  # Portfolio value over time
-    shares_owned = []  # Shares owned over time
-    trade_ranks = []  # Store the rank for each trade
+    # Initialize portfolio DataFrame
+    portfolio = signals_df.copy()
+    portfolio['position'] = 0.0  # Number of shares/units held
+    portfolio['cash'] = initial_capital  # Cash on hand
+    portfolio['position_value'] = 0.0  # Value of position
+    portfolio['portfolio_value'] = initial_capital  # Total portfolio value
+    portfolio['returns'] = 0.0  # Daily returns
+    portfolio['drawdown'] = 0.0  # Drawdown from peak
     
-    # For each row in the signals DataFrame
-    for idx, row in signals_df.iterrows():
-        signal = row.get('signal', 0)
-        price = price_data.loc[idx, 'close'] if idx in price_data.index else 0
-        current_rank = None
+    # Trading cost as a percentage
+    trading_cost_percentage = 0.0025  # 0.25% per trade
+    
+    # Value to track the peak portfolio value for drawdown calculation
+    peak_value = initial_capital
+    
+    # Process each day
+    for i in range(1, len(portfolio)):
+        # Get current day and previous day
+        current_day = portfolio.index[i]
+        prev_day = portfolio.index[i-1]
         
-        if price == 0:
-            continue
+        # Carry over position from previous day
+        portfolio.loc[current_day, 'position'] = portfolio.loc[prev_day, 'position']
+        portfolio.loc[current_day, 'cash'] = portfolio.loc[prev_day, 'cash']
         
-        # Calculate performance ranking at this timestamp if we have enough data
-        if prices_dataset:
-            # Use the backtest's ranking algorithm
-            current_time = idx
-            perf_rankings = calculate_performance_ranking(prices_dataset, current_time, lookback_days)
-            
-            if perf_rankings is not None and selected_symbol in perf_rankings.index:
-                # Get the raw rank value (percentile)
-                raw_rank = perf_rankings.loc[selected_symbol, 'rank']
-                
-                # Calculate integer rank (1 is best, total_assets is worst)
-                total_assets = len(perf_rankings)
-                rank = 1 + sum(1 for other_metric in perf_rankings['rank'].values if other_metric > raw_rank)
-                current_rank = rank
+        # Get current ranking of assets
+        try:
+            current_ranking = calculate_performance_ranking(prices_dataset, current_day, lookback_days)
+            total_assets = len(current_ranking)
+            asset_rank = int(current_ranking.loc[selected_symbol, 'rank'] * total_assets) if selected_symbol in current_ranking.index else total_assets
+        except:
+            # If ranking calculation fails, use default values
+            total_assets = len(prices_dataset)
+            asset_rank = total_assets  # Worst rank by default
         
         # Process buy signal
-        if signal == 1 and cash > 0:
-            if current_rank is not None:
-                # Use the ranking-based buy percentage
-                total_assets = len(prices_dataset)
-                buy_percentage = calculate_buy_percentage(current_rank, total_assets)
-                amount_to_use = cash * buy_percentage
-            else:
-                # Fallback to the original fixed percentage
-                amount_to_use = cash * 0.95
+        if portfolio.loc[current_day, 'signal'] == 1:
+            # Calculate buy amount based on asset rank
+            buy_percentage = calculate_buy_percentage(asset_rank, total_assets)
+            buy_amount = portfolio.loc[current_day, 'cash'] * buy_percentage
             
-            # Calculate shares to buy
-            shares_to_buy = amount_to_use / price if price > 0 else 0
+            # Calculate trading cost
+            trading_cost = buy_amount * trading_cost_percentage
+            buy_amount -= trading_cost
             
-            # Crypto can be fractional
-            shares_to_buy = round(shares_to_buy, 8)
+            # Update position and cash
+            new_position = portfolio.loc[current_day, 'position'] + (buy_amount / portfolio.loc[current_day, 'close'])
+            new_cash = portfolio.loc[current_day, 'cash'] - buy_amount - trading_cost
             
-            # Update position
-            position += shares_to_buy
-            cash -= shares_to_buy * price
+            portfolio.loc[current_day, 'position'] = new_position
+            portfolio.loc[current_day, 'cash'] = new_cash
         
-        # Process sell signal    
-        elif signal == -1 and position > 0:
-            if current_rank is not None:
-                # Use the ranking-based sell percentage
-                total_assets = len(prices_dataset)
-                sell_percentage = calculate_sell_percentage(current_rank, total_assets)
-                shares_to_sell = position * sell_percentage
-                cash += shares_to_sell * price
-                position -= shares_to_sell
-            else:
-                # Fallback to selling all shares
-                cash += position * price
-                position = 0
+        # Process sell signal
+        elif portfolio.loc[current_day, 'signal'] == -1 and portfolio.loc[current_day, 'position'] > 0:
+            # Calculate sell amount based on asset rank
+            sell_percentage = calculate_sell_percentage(asset_rank, total_assets)
+            sell_units = portfolio.loc[current_day, 'position'] * sell_percentage
+            sell_amount = sell_units * portfolio.loc[current_day, 'close']
+            
+            # Calculate trading cost
+            trading_cost = sell_amount * trading_cost_percentage
+            sell_amount -= trading_cost
+            
+            # Update position and cash
+            new_position = portfolio.loc[current_day, 'position'] - sell_units
+            new_cash = portfolio.loc[current_day, 'cash'] + sell_amount
+            
+            portfolio.loc[current_day, 'position'] = new_position
+            portfolio.loc[current_day, 'cash'] = new_cash
         
-        # Calculate portfolio value
-        current_value = cash + (position * price)
-        portfolio_value.append(current_value)
-        shares_owned.append(position)
-        trade_ranks.append(current_rank)  # Add rank information
+        # Calculate position value and portfolio value
+        portfolio.loc[current_day, 'position_value'] = portfolio.loc[current_day, 'position'] * portfolio.loc[current_day, 'close']
+        portfolio.loc[current_day, 'portfolio_value'] = portfolio.loc[current_day, 'cash'] + portfolio.loc[current_day, 'position_value']
+        
+        # Calculate daily returns
+        prev_value = portfolio.loc[prev_day, 'portfolio_value']
+        current_value = portfolio.loc[current_day, 'portfolio_value']
+        portfolio.loc[current_day, 'returns'] = (current_value / prev_value) - 1 if prev_value > 0 else 0
+        
+        # Update peak value and calculate drawdown
+        if current_value > peak_value:
+            peak_value = current_value
+        
+        if peak_value > 0:
+            portfolio.loc[current_day, 'drawdown'] = (peak_value - current_value) / peak_value
     
-    # Create a DataFrame for the portfolio history
-    portfolio_df = pd.DataFrame({
-        'portfolio_value': portfolio_value,
-        'shares_owned': shares_owned,
-        'rank': trade_ranks
-    }, index=signals_df.index)
+    return portfolio
+
+def calculate_performance_ranking(prices_dataset: Dict[str, pd.DataFrame], 
+                                 current_time: datetime.datetime, 
+                                 lookback_days: int) -> pd.DataFrame:
+    """
+    Calculate performance ranking of assets over the given lookback period
     
-    # Add additional calculated columns
-    portfolio_df['price'] = price_data['close']
-    portfolio_df['returns'] = portfolio_df['portfolio_value'].pct_change()
-    portfolio_df['cumulative_returns'] = (1 + portfolio_df['returns']).cumprod() - 1
+    Args:
+        prices_dataset: Dictionary of price dataframes keyed by symbol
+        current_time: Current time to use as the reference point
+        lookback_days: Number of days to look back
+        
+    Returns:
+        DataFrame with performance metrics
+    """
+    from modules.backtest import backtest_calculate_ranking
     
-    # Calculate some portfolio metrics
-    portfolio_df['drawdown'] = 1 - portfolio_df['portfolio_value'] / portfolio_df['portfolio_value'].cummax()
-    
-    return portfolio_df
+    # Use the function from backtest.py
+    return backtest_calculate_ranking(prices_dataset, current_time, lookback_days)
