@@ -134,25 +134,34 @@ def get_indicator_values(data: pd.DataFrame) -> Dict[str, pd.Series]:
 
 def load_best_params(symbol: str, client) -> Dict:
     try:
-        # First check if file exists in Object Storage
-        if "best_params.json" in client.list():
-            json_content = client.download_as_text("best_params.json")
-            best_params_data = json.loads(json_content)
-            logger.info("Successfully loaded parameters from Replit Object Storage")
-            if symbol in best_params_data:
-                params = best_params_data[symbol]['best_params']
-                logger.info(f"Using best parameters for {symbol}: {params}")
-                return params
-            else:
-                logger.warning(f"No parameters found for {symbol} in Object Storage")
-                return get_default_params() #Return default if no symbol specific params
-        else:
-            # Create initial file in Object Storage
+        # Check if file exists in Object Storage, if not create it
+        if "best_params.json" not in client.list():
             default_params = get_default_params()
             initial_data = {symbol: {'best_params': default_params, 'date': datetime.datetime.now().strftime("%Y-%m-%d")}}
             client.upload_from_text("best_params.json", json.dumps(initial_data))
             logger.info("Created initial parameters file in Object Storage")
             return default_params
+
+        # Load existing parameters
+        json_content = client.download_as_text("best_params.json")
+        best_params_data = json.loads(json_content)
+        
+        # Return symbol-specific or default parameters
+        if symbol in best_params_data:
+            params = best_params_data[symbol]['best_params']
+            logger.info(f"Using best parameters for {symbol} from Object Storage: {params}")
+            return params
+        else:
+            default_params = get_default_params()
+            # Add default params for this symbol
+            best_params_data[symbol] = {
+                'best_params': default_params,
+                'date': datetime.datetime.now().strftime("%Y-%m-%d")
+            }
+            client.upload_from_text("best_params.json", json.dumps(best_params_data))
+            logger.info(f"Added default parameters for {symbol} to Object Storage")
+            return default_params
+
     except Exception as e:
         logger.error(f"Object Storage error: {str(e)}")
-        raise  # Re-raise to prevent silent fallback
+        raise  # Re-raise the exception to handle it at a higher level
