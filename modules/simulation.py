@@ -71,12 +71,14 @@ def simulate_portfolio(signals_df: pd.DataFrame,
     if 'close' not in portfolio.columns and 'close' in price_data.columns:
         portfolio['close'] = price_data['close']
     
+    # Ensure all numeric columns are float to avoid dtype incompatibility warnings
     portfolio['position'] = 0.0  # Number of shares/units held
-    portfolio['cash'] = initial_capital  # Cash on hand
+    portfolio['cash'] = float(initial_capital)  # Cash on hand
     portfolio['position_value'] = 0.0  # Value of position
-    portfolio['portfolio_value'] = initial_capital  # Total portfolio value
+    portfolio['portfolio_value'] = float(initial_capital)  # Total portfolio value
     portfolio['returns'] = 0.0  # Daily returns
     portfolio['drawdown'] = 0.0  # Drawdown from peak
+    portfolio['asset_rank'] = 0  # Add rank column to track asset ranking at signal time
     
     # Trading cost as a percentage
     trading_cost_percentage = 0.0025  # 0.25% per trade
@@ -120,6 +122,9 @@ def simulate_portfolio(signals_df: pd.DataFrame,
             
             portfolio.loc[current_day, 'position'] = new_position
             portfolio.loc[current_day, 'cash'] = new_cash
+            
+            # Store asset rank at time of signal
+            portfolio.loc[current_day, 'asset_rank'] = asset_rank
         
         # Process sell signal
         elif portfolio.loc[current_day, 'signal'] == -1 and portfolio.loc[current_day, 'position'] > 0:
@@ -138,6 +143,9 @@ def simulate_portfolio(signals_df: pd.DataFrame,
             
             portfolio.loc[current_day, 'position'] = new_position
             portfolio.loc[current_day, 'cash'] = new_cash
+            
+            # Store asset rank at time of signal
+            portfolio.loc[current_day, 'asset_rank'] = asset_rank
         
         # Calculate position value and portfolio value
         portfolio.loc[current_day, 'position_value'] = portfolio.loc[current_day, 'position'] * portfolio.loc[current_day, 'close']
