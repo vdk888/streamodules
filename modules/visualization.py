@@ -123,8 +123,10 @@ def create_price_chart(price_data: pd.DataFrame,
         # Update layout to include the secondary y-axis
         fig.update_layout(
             yaxis2=dict(
-                title="Portfolio Value",
-                titlefont=dict(color="black"),
+                title=dict(
+                    text="Portfolio Value",
+                    font=dict(color="black")
+                ),
                 tickfont=dict(color="black"),
                 anchor="x",
                 overlaying="y",
@@ -167,7 +169,14 @@ def create_price_chart(price_data: pd.DataFrame,
         ), row=current_row, col=1)
         
         # Add title for the subplot
-        fig.update_yaxes(title_text="Daily Composite", row=current_row, col=1)
+        fig.update_yaxes(
+            title=dict(
+                text="Daily Composite",
+                font=dict(color="blue")
+            ), 
+            row=current_row, 
+            col=1
+        )
         current_row += 1
     
     # Add Weekly Composite indicator if available
@@ -204,7 +213,14 @@ def create_price_chart(price_data: pd.DataFrame,
             ), row=current_row, col=1)
         
         # Add title for the subplot
-        fig.update_yaxes(title_text="Weekly Composite", row=current_row, col=1)
+        fig.update_yaxes(
+            title=dict(
+                text="Weekly Composite",
+                font=dict(color="blue")
+            ),
+            row=current_row,
+            col=1
+        )
         current_row += 1
     
     # Add MACD indicator if enabled
@@ -243,7 +259,14 @@ def create_price_chart(price_data: pd.DataFrame,
                 ), row=current_row, col=1)
             
             # Add title for the subplot
-            fig.update_yaxes(title_text="MACD", row=current_row, col=1)
+            fig.update_yaxes(
+            title=dict(
+                text="MACD",
+                font=dict(color="blue")
+            ),
+            row=current_row,
+            col=1
+        )
             current_row += 1
     
     # Add RSI indicator if enabled
@@ -283,7 +306,14 @@ def create_price_chart(price_data: pd.DataFrame,
             )
             
             # Add title for the subplot
-            fig.update_yaxes(title_text="RSI", row=current_row, col=1)
+            fig.update_yaxes(
+            title=dict(
+                text="RSI",
+                font=dict(color="blue")
+            ),
+            row=current_row,
+            col=1
+        )
             current_row += 1
     
     # Add Stochastic indicator if enabled
@@ -333,7 +363,14 @@ def create_price_chart(price_data: pd.DataFrame,
             )
             
             # Add title for the subplot
-            fig.update_yaxes(title_text="Stochastic", row=current_row, col=1)
+            fig.update_yaxes(
+            title=dict(
+                text="Stochastic",
+                font=dict(color="blue")
+            ),
+            row=current_row,
+            col=1
+        )
             current_row += 1
     
     # Add Fractal Complexity indicator if enabled
@@ -362,7 +399,14 @@ def create_price_chart(price_data: pd.DataFrame,
             )
             
             # Add title for the subplot
-            fig.update_yaxes(title_text="Fractal Complexity", row=current_row, col=1)
+            fig.update_yaxes(
+            title=dict(
+                text="Fractal Complexity",
+                font=dict(color="blue")
+            ),
+            row=current_row,
+            col=1
+        )
     
     # Update layout
     symbol_name = price_data.iloc[-1]['symbol'] if 'symbol' in price_data.columns else ''
@@ -489,8 +533,20 @@ def create_portfolio_performance_chart(portfolio_df: pd.DataFrame) -> go.Figure:
         margin=dict(t=30, l=50, r=50, b=30)
     )
     
-    # Update y-axes titles
-    fig.update_yaxes(title_text="Portfolio Value", secondary_y=False)
-    fig.update_yaxes(title_text="Drawdown (%)", secondary_y=True)
+    # Update y-axes titles with proper title format (not using title_text which might use titlefont internally)
+    fig.update_yaxes(
+        title=dict(
+            text="Portfolio Value",
+            font=dict(color="blue")
+        ), 
+        secondary_y=False
+    )
+    fig.update_yaxes(
+        title=dict(
+            text="Drawdown (%)",
+            font=dict(color="red")
+        ), 
+        secondary_y=True
+    )
     
     return fig

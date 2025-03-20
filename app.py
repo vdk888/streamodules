@@ -81,7 +81,7 @@ def update_charts():
             initial_capital=settings["initial_capital"]
         )
 
-    # Create charts
+    # Create charts with all the indicator displays
     main_chart = create_price_chart(
         price_data=df,
         signals_df=signals_df,
@@ -95,8 +95,9 @@ def update_charts():
         show_signals=settings["show_signals"]
     )
 
-    # Update the main chart with a unique key
-    st.session_state.chart_container.plotly_chart(main_chart, use_container_width=True, key="main_price_chart")
+    # Update the main chart with a unique key based on symbol and timeframe
+    unique_chart_key = f"main_chart_{settings['symbol']}_{settings['timeframe']}"
+    st.session_state.chart_container.plotly_chart(main_chart, use_container_width=True, key=unique_chart_key)
 
     # Update portfolio performance if available
     if portfolio_df is not None:
@@ -104,7 +105,8 @@ def update_charts():
             st.subheader("Portfolio Performance")
             portfolio_chart = create_portfolio_performance_chart(portfolio_df)
             if portfolio_chart:
-                st.plotly_chart(portfolio_chart, use_container_width=True, key="portfolio_performance_chart")
+                unique_portfolio_key = f"portfolio_chart_{settings['symbol']}_{settings['timeframe']}"
+                st.plotly_chart(portfolio_chart, use_container_width=True, key=unique_portfolio_key)
 
         # Update metrics
         with st.session_state.metrics_container.container():
@@ -135,7 +137,8 @@ def update_charts():
     if performance_df is not None:
         ranking_chart = create_performance_ranking_chart(performance_df)
         if ranking_chart:
-            st.plotly_chart(ranking_chart, use_container_width=True, key="performance_ranking_chart")
+            unique_ranking_key = f"ranking_chart_{settings['timeframe']}_{settings['lookback_days']}"
+            st.plotly_chart(ranking_chart, use_container_width=True, key=unique_ranking_key)
     else:
         st.warning("Could not calculate performance ranking. Try a different timeframe or lookback period.")
 
