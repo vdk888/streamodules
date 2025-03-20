@@ -66,6 +66,11 @@ def simulate_portfolio(signals_df: pd.DataFrame,
     
     # Initialize portfolio DataFrame
     portfolio = signals_df.copy()
+    
+    # Make sure we have the price data columns we need
+    if 'close' not in portfolio.columns and 'close' in price_data.columns:
+        portfolio['close'] = price_data['close']
+    
     portfolio['position'] = 0.0  # Number of shares/units held
     portfolio['cash'] = initial_capital  # Cash on hand
     portfolio['position_value'] = 0.0  # Value of position

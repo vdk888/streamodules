@@ -8,17 +8,19 @@ from typing import Dict, Optional, Tuple
 # Add the current directory to sys.path
 sys.path.append('.')
 
-# Import modules
-from modules.ui import create_sidebar, create_header, setup_auto_refresh, update_progress_bar
-from modules.ui import handle_backtest_button, handle_optimization_button
-from modules.data import get_price_data, get_multi_asset_data, generate_trading_signals
-from modules.storage import load_best_params
-from modules.simulation import simulate_portfolio
-from modules.visualization import create_price_chart, create_performance_ranking_chart, create_portfolio_performance_chart
-from modules.backtest import calculate_performance_ranking
+# Import all modules for easier access
+from modules import (
+    create_sidebar, create_header, setup_auto_refresh, update_progress_bar,
+    handle_backtest_button, handle_optimization_button,
+    get_price_data, get_multi_asset_data, generate_trading_signals,
+    load_best_params,
+    simulate_portfolio,
+    create_price_chart, create_performance_ranking_chart, create_portfolio_performance_chart,
+    calculate_performance_ranking
+)
 
 # Import configuration
-from attached_assets.config import TRADING_SYMBOLS
+from modules.config import TRADING_SYMBOLS
 
 # Page configuration
 st.set_page_config(
@@ -127,7 +129,23 @@ def update_charts():
 # Create a class to hold state
 class StateContainer:
     def __init__(self):
-        self.settings = None
+        self.settings = {
+            "symbol": "BTC/USD",  # Default symbol
+            "timeframe": "1h",    # Default timeframe
+            "lookback_days": 5,   # Default lookback days
+            "auto_refresh": True, # Auto-refresh enabled by default
+            "update_interval": 60, # 60 seconds update interval
+            "enable_simulation": True, # Enable portfolio simulation
+            "initial_capital": 100000, # Initial capital for simulation
+            "show_macd": True,    # Show MACD indicator
+            "show_rsi": True,     # Show RSI indicator
+            "show_stochastic": True, # Show Stochastic indicator
+            "show_fractal": True, # Show Fractal Complexity indicator
+            "show_signals": True, # Show trading signals
+            "selected_symbol": "BTC/USD", # Selected trading symbol
+            "use_best_params": False, # Use best parameters from optimization
+            "force_refresh": False # Whether to force a refresh
+        }
 
 # Initialize session state
 if 'state_container' not in st.session_state:
