@@ -235,9 +235,9 @@ def load_best_params(symbol):
                     except FileNotFoundError:
                         st.warning("Best parameters file not found. Using defaults.")
                         return None
-        except FileNotFoundError:
-            st.warning("Best parameters file not found. Using defaults.")
-            return None
+                except FileNotFoundError:
+                    st.warning("Best parameters file not found. Using defaults.")
+                    return None
     except Exception as e:
         st.warning(f"Error loading parameters: {str(e)}. Using defaults.")
         return None
