@@ -95,21 +95,34 @@ def update_charts():
         show_signals=settings["show_signals"]
     )
 
-    # Update the main chart with a unique key based on symbol and timeframe
-    unique_chart_key = f"main_chart_{settings['symbol']}_{settings['timeframe']}"
+    # Clear the container first
+    st.session_state.chart_container.empty()
+    
+    # Update the main chart with a unique key based on symbol, timeframe and timestamp
+    # Using import time at the top of file
+    import time
+    timestamp = int(time.time())
+    unique_chart_key = f"main_chart_{settings['symbol']}_{settings['timeframe']}_{timestamp}"
     st.session_state.chart_container.plotly_chart(main_chart, use_container_width=True, key=unique_chart_key)
 
     # Update portfolio performance if available
     if portfolio_df is not None:
         with st.session_state.portfolio_container.container():
+            # Clear the container first
+            st.session_state.portfolio_container.empty()
+            
             st.subheader("Portfolio Performance")
             portfolio_chart = create_portfolio_performance_chart(portfolio_df)
             if portfolio_chart:
-                unique_portfolio_key = f"portfolio_chart_{settings['symbol']}_{settings['timeframe']}"
+                timestamp = int(time.time())
+                unique_portfolio_key = f"portfolio_chart_{settings['symbol']}_{settings['timeframe']}_{timestamp}"
                 st.plotly_chart(portfolio_chart, use_container_width=True, key=unique_portfolio_key)
 
         # Update metrics
         with st.session_state.metrics_container.container():
+            # Clear the container first
+            st.session_state.metrics_container.empty()
+            
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 initial_value = portfolio_df['portfolio_value'].iloc[0]
@@ -130,17 +143,23 @@ def update_charts():
 
     # Update asset performance ranking
     with st.session_state.ranking_container.container():
+        # Clear the container first
+        st.session_state.ranking_container.empty()
+        
         st.subheader("Asset Performance Ranking")
-    prices_dataset = get_multi_asset_data(TRADING_SYMBOLS, settings["timeframe"], settings["lookback_days"])
-    performance_df = calculate_performance_ranking(prices_dataset, settings["lookback_days"])
+        
+        # Fetch ranking data
+        prices_dataset = get_multi_asset_data(TRADING_SYMBOLS, settings["timeframe"], settings["lookback_days"])
+        performance_df = calculate_performance_ranking(prices_dataset, settings["lookback_days"])
 
-    if performance_df is not None:
-        ranking_chart = create_performance_ranking_chart(performance_df)
-        if ranking_chart:
-            unique_ranking_key = f"ranking_chart_{settings['timeframe']}_{settings['lookback_days']}"
-            st.plotly_chart(ranking_chart, use_container_width=True, key=unique_ranking_key)
-    else:
-        st.warning("Could not calculate performance ranking. Try a different timeframe or lookback period.")
+        if performance_df is not None:
+            ranking_chart = create_performance_ranking_chart(performance_df)
+            if ranking_chart:
+                timestamp = int(time.time())
+                unique_ranking_key = f"ranking_chart_{settings['timeframe']}_{settings['lookback_days']}_{timestamp}"
+                st.plotly_chart(ranking_chart, use_container_width=True, key=unique_ranking_key)
+        else:
+            st.warning("Could not calculate performance ranking. Try a different timeframe or lookback period.")
 
 # Create a class to hold state
 class StateContainer:

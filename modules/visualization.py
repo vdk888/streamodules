@@ -53,14 +53,18 @@ def create_price_chart(price_data: pd.DataFrame,
         rows += 1
         
     # Create subplots with appropriate row heights
-    row_heights = [0.4]  # First row is the price chart (40% of height)
+    row_heights = [0.35]  # First row is the price chart (35% of height)
     
     # Adjust height per indicator row
     total_indicator_rows = rows - 1
-    height_per_indicator = 0.6 / total_indicator_rows if total_indicator_rows > 0 else 0.6
-    
-    for _ in range(total_indicator_rows):
-        row_heights.append(height_per_indicator)
+    if total_indicator_rows == 0:
+        # If no indicator rows, just use the full height for price chart
+        row_heights = [1.0]
+    else:
+        # Distribute remaining 65% height among indicator rows
+        height_per_indicator = 0.65 / total_indicator_rows
+        for _ in range(total_indicator_rows):
+            row_heights.append(height_per_indicator)
         
     # Create figure
     fig = make_subplots(rows=rows, cols=1, shared_xaxes=True, 
