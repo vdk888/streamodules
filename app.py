@@ -174,7 +174,7 @@ class StateContainer:
             "timeframe": "1h",    # Default timeframe
             "lookback_days": 5,   # Default lookback days
             "auto_refresh": True, # Auto-refresh enabled by default
-            "update_interval": 60, # 60 seconds update interval
+            "update_interval": 300, # 60 seconds update interval
             "enable_simulation": True, # Enable portfolio simulation
             "initial_capital": 100000, # Initial capital for simulation
             "show_macd": True,    # Show MACD indicator
