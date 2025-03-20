@@ -95,8 +95,8 @@ def update_charts():
         show_signals=settings["show_signals"]
     )
 
-    # Update the main chart
-    st.session_state.chart_container.plotly_chart(main_chart, use_container_width=True)
+    # Update the main chart with a unique key
+    st.session_state.chart_container.plotly_chart(main_chart, use_container_width=True, key="main_price_chart")
 
     # Update portfolio performance if available
     if portfolio_df is not None:
@@ -104,7 +104,7 @@ def update_charts():
             st.subheader("Portfolio Performance")
             portfolio_chart = create_portfolio_performance_chart(portfolio_df)
             if portfolio_chart:
-                st.plotly_chart(portfolio_chart, use_container_width=True)
+                st.plotly_chart(portfolio_chart, use_container_width=True, key="portfolio_performance_chart")
 
         # Update metrics
         with st.session_state.metrics_container.container():
@@ -135,7 +135,7 @@ def update_charts():
     if performance_df is not None:
         ranking_chart = create_performance_ranking_chart(performance_df)
         if ranking_chart:
-            st.plotly_chart(ranking_chart, use_container_width=True)
+            st.plotly_chart(ranking_chart, use_container_width=True, key="performance_ranking_chart")
     else:
         st.warning("Could not calculate performance ranking. Try a different timeframe or lookback period.")
 
