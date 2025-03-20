@@ -100,8 +100,8 @@ def update_charts():
         st.warning("Could not generate signals. Please try a different timeframe or lookback period.")
         return
     
-    # Create price chart with a secondary y-axis for indicators
-    fig1 = make_subplots(rows=1, cols=1, shared_xaxes=True, specs=[[{"secondary_y": True}]])
+    # Create price chart (without the composite indicators)
+    fig1 = make_subplots(rows=1, cols=1)
     
     # Add candlestick chart
     fig1.add_trace(
@@ -112,8 +112,7 @@ def update_charts():
             low=df['low'], 
             close=df['close'],
             name="Price"
-        ),
-        secondary_y=False
+        )
     )
     
     # Add buy signals if available
@@ -144,85 +143,10 @@ def update_charts():
                 )
             )
     
-    # Daily composite line
-    if not signals_df.empty and 'daily_composite' in signals_df.columns:
-        fig1.add_trace(
-            go.Scatter(
-                x=signals_df.index,
-                y=signals_df['daily_composite'],
-                mode='lines',
-                name="Daily Composite",
-                line=dict(color='royalblue', width=2.5)
-            ),
-            secondary_y=True
-        )
-        
-        # Daily threshold lines
-        if 'daily_up_lim' in signals_df.columns:
-            fig1.add_trace(
-                go.Scatter(
-                    x=signals_df.index,
-                    y=signals_df['daily_up_lim'],
-                    mode='lines',
-                    name="Daily Upper Threshold",
-                    line=dict(color='green', width=1.5, dash='dash')
-                ),
-                secondary_y=True
-            )
-        
-        if 'daily_down_lim' in signals_df.columns:
-            fig1.add_trace(
-                go.Scatter(
-                    x=signals_df.index,
-                    y=signals_df['daily_down_lim'],
-                    mode='lines',
-                    name="Daily Lower Threshold",
-                    line=dict(color='red', width=1.5, dash='dash')
-                ),
-                secondary_y=True
-            )
+    # Composite indicators will be placed in separate subplots
     
-    # Weekly composite line
-    if not signals_df.empty and 'weekly_composite' in signals_df.columns:
-        fig1.add_trace(
-            go.Scatter(
-                x=signals_df.index,
-                y=signals_df['weekly_composite'],
-                mode='lines',
-                name="Weekly Composite",
-                line=dict(color='purple', width=2.5)
-            ),
-            secondary_y=True
-        )
-        
-        # Weekly threshold lines
-        if 'weekly_up_lim' in signals_df.columns:
-            fig1.add_trace(
-                go.Scatter(
-                    x=signals_df.index,
-                    y=signals_df['weekly_up_lim'],
-                    mode='lines',
-                    name="Weekly Upper Threshold",
-                    line=dict(color='darkgreen', width=1.5, dash='dot')
-                ),
-                secondary_y=True
-            )
-        
-        if 'weekly_down_lim' in signals_df.columns:
-            fig1.add_trace(
-                go.Scatter(
-                    x=signals_df.index,
-                    y=signals_df['weekly_down_lim'],
-                    mode='lines',
-                    name="Weekly Lower Threshold",
-                    line=dict(color='darkred', width=1.5, dash='dot')
-                ),
-                secondary_y=True
-            )
-    
-    # Set y-axis titles
-    fig1.update_yaxes(title_text="Price (USD)", secondary_y=False)
-    fig1.update_yaxes(title_text="Indicator Value", secondary_y=True)
+    # Set y-axis title
+    fig1.update_yaxes(title_text="Price (USD)")
     
     # Calculate dynamic y-axis range to better fit the price data
     price_min = df['low'].min()
@@ -252,14 +176,14 @@ def update_charts():
     # Display the price chart with a unique key to avoid duplicate ID error
     price_chart_placeholder.plotly_chart(fig1, use_container_width=True, key="price_chart")
     
-    # Create technical indicators chart
+    # Create technical indicators chart with 6 subplots (adding daily and weekly composite)
     fig2 = make_subplots(
-        rows=4, 
+        rows=6, 
         cols=1, 
         shared_xaxes=True,
-        vertical_spacing=0.05,
-        row_heights=[0.25, 0.25, 0.25, 0.25],
-        subplot_titles=("MACD", "RSI", "Stochastic", "Fractal Complexity")
+        vertical_spacing=0.03,
+        row_heights=[0.16, 0.16, 0.16, 0.16, 0.18, 0.18],
+        subplot_titles=("MACD", "RSI", "Stochastic", "Fractal Complexity", "Daily Composite", "Weekly Composite")
     )
     
     # Add MACD
@@ -357,9 +281,109 @@ def update_charts():
             row=4, col=1
         )
     
+    # Add Daily Composite indicator
+    if not signals_df.empty and 'daily_composite' in signals_df.columns:
+        # Daily composite line
+        fig2.add_trace(
+            go.Scatter(
+                x=signals_df.index,
+                y=signals_df['daily_composite'],
+                mode='lines',
+                name="Daily Composite",
+                line=dict(color='royalblue', width=2.5)
+            ),
+            row=5, col=1
+        )
+        
+        # Daily threshold lines
+        if 'daily_up_lim' in signals_df.columns:
+            fig2.add_trace(
+                go.Scatter(
+                    x=signals_df.index,
+                    y=signals_df['daily_up_lim'],
+                    mode='lines',
+                    name="Daily Upper Threshold",
+                    line=dict(color='green', width=1.5, dash='dash')
+                ),
+                row=5, col=1
+            )
+        
+        if 'daily_down_lim' in signals_df.columns:
+            fig2.add_trace(
+                go.Scatter(
+                    x=signals_df.index,
+                    y=signals_df['daily_down_lim'],
+                    mode='lines',
+                    name="Daily Lower Threshold",
+                    line=dict(color='red', width=1.5, dash='dash')
+                ),
+                row=5, col=1
+            )
+        
+        # Add zero line
+        fig2.add_trace(
+            go.Scatter(
+                x=[df.index[0], df.index[-1]],
+                y=[0, 0],
+                name="Zero Line",
+                line=dict(color='gray', width=1, dash='dash')
+            ),
+            row=5, col=1
+        )
+    
+    # Add Weekly Composite indicator
+    if not signals_df.empty and 'weekly_composite' in signals_df.columns:
+        # Weekly composite line
+        fig2.add_trace(
+            go.Scatter(
+                x=signals_df.index,
+                y=signals_df['weekly_composite'],
+                mode='lines',
+                name="Weekly Composite",
+                line=dict(color='purple', width=2.5)
+            ),
+            row=6, col=1
+        )
+        
+        # Weekly threshold lines
+        if 'weekly_up_lim' in signals_df.columns:
+            fig2.add_trace(
+                go.Scatter(
+                    x=signals_df.index,
+                    y=signals_df['weekly_up_lim'],
+                    mode='lines',
+                    name="Weekly Upper Threshold",
+                    line=dict(color='darkgreen', width=1.5, dash='dot')
+                ),
+                row=6, col=1
+            )
+        
+        if 'weekly_down_lim' in signals_df.columns:
+            fig2.add_trace(
+                go.Scatter(
+                    x=signals_df.index,
+                    y=signals_df['weekly_down_lim'],
+                    mode='lines',
+                    name="Weekly Lower Threshold",
+                    line=dict(color='darkred', width=1.5, dash='dot')
+                ),
+                row=6, col=1
+            )
+        
+        # Add zero line
+        fig2.add_trace(
+            go.Scatter(
+                x=[df.index[0], df.index[-1]],
+                y=[0, 0],
+                name="Zero Line",
+                line=dict(color='gray', width=1, dash='dash')
+            ),
+            row=6, col=1
+        )
+    
     # Update layout
     fig2.update_layout(
-        height=800,
+        height=1000,  # Increased height to accommodate the additional subplots
         margin=dict(l=0, r=0, t=40, b=0),
         showlegend=False
     )
