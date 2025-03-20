@@ -199,44 +199,29 @@ def load_best_params(symbol):
                 st.stop()
 
             try:
-                st.write("Attempting to initialize Replit Object Storage client...")
-                client = Client()
-                st.write("Client initialized successfully")
+                json_content = client.download_as_text(best_params_file)
+                best_params_data = json.loads(json_content)
+                st.success("Successfully loaded parameters from Replit Object Storage")
 
-                # Try to get parameters from Object Storage
-                try:
-                    st.write("Attempting to download best_params.json...")
-                    json_content = client.download_as_text("best_params.json")
-                    st.write(f"Downloaded content: {json_content[:100]}...")  # Show first 100 chars
-                    best_params_data = json.loads(json_content)
-                    st.success("Successfully loaded parameters from Replit Object Storage")
+                if symbol in best_params_data:
+                    params = best_params_data[symbol]['best_params']
+                    return params
+                else:
+                    st.warning(f"No optimized parameters found for {symbol} in Replit Object Storage. Using defaults.")
+                    return None
+            except Exception as e:
+                st.warning(f"Error accessing Replit Object Storage: {str(e)}. Falling back to local file.")
 
-                    if symbol in best_params_data:
-                        params = best_params_data[symbol]['best_params']
-                        return params
-                    else:
-                        st.warning(f"No optimized parameters found for {symbol} in Replit Object Storage. Using defaults.")
-                        return None
-                except Exception as e:
-                    st.warning(f"Error accessing Replit Object Storage: {str(e)}. Falling back to local file.")
+        # Fallback to local file if needed
+        with open(best_params_file, "r") as f:
+            best_params_data = json.load(f)
+            st.info("Loaded parameters from local file as fallback")
 
-                    # Fallback to local file if needed
-                    try:
-                        with open(best_params_file, "r") as f:
-                            best_params_data = json.load(f)
-                            st.info("Loaded parameters from local file as fallback")
-
-                            if symbol in best_params_data:
-                                params = best_params_data[symbol]['best_params']
-                                return params
-                            else:
-                                st.warning(f"No optimized parameters found for {symbol}. Using defaults.")
-                                return None
-                    except FileNotFoundError:
-                        st.warning("Best parameters file not found. Using defaults.")
-                        return None
-            except FileNotFoundError:
-                st.warning("Best parameters file not found. Using defaults.")
+            if symbol in best_params_data:
+                params = best_params_data[symbol]['best_params']
+                return params
+            else:
+                st.warning(f"No optimized parameters found for {symbol}. Using defaults.")
                 return None
     except Exception as e:
         st.warning(f"Error loading parameters: {str(e)}. Using defaults.")
@@ -264,7 +249,7 @@ def simulate_portfolio(signals_df, price_data, initial_capital=100000):
     portfolio_value = []  # Portfolio value over time
     shares_owned = []  # Shares owned over time
     trade_ranks = []  # Store the rank for each trade
-
+    
     # For iterating through crypto assets, fetch data for all
     prices_dataset = {}
     # Fetch data for multiple assets (only once at the beginning)
@@ -296,11 +281,11 @@ def simulate_portfolio(signals_df, price_data, initial_capital=100000):
             current_time = idx
             lookback_period = lookback_days  # Use the app's lookback slider
             perf_rankings = backtest_calculate_ranking(prices_dataset, current_time, lookback_period)
-
+            
             if perf_rankings is not None and selected_symbol in perf_rankings.index:
                 # Get the raw rank value (percentile)
                 raw_rank = perf_rankings.loc[selected_symbol, 'rank']
-
+                
                 # Calculate integer rank (1 is best, total_assets is worst)
                 total_assets = len(perf_rankings)
                 rank = 1 + sum(1 for other_metric in perf_rankings['rank'].values if other_metric > raw_rank)
@@ -311,7 +296,7 @@ def simulate_portfolio(signals_df, price_data, initial_capital=100000):
             if current_rank is not None:
                 # Use the ranking-based buy percentage from backtest_individual.py
                 total_assets = len(prices_dataset)
-
+                
                 # Calculate buy percentage using the same formula as in backtest_individual.py
                 def calculate_buy_percentage(rank, total_assets):
                     # Calculate cutoff points
@@ -327,13 +312,13 @@ def simulate_portfolio(signals_df, price_data, initial_capital=100000):
                     wave = 0.02 * np.sin(2 * np.pi * x)  # Smaller oscillation
                     linear = 0.48 - 0.48 * x  # Linear decrease from 0.48 to 0.0
                     return max(0.0, min(0.5, linear + wave))  # Clamp between 0.0 and 0.5
-
+                
                 buy_percentage = calculate_buy_percentage(current_rank, total_assets)
                 amount_to_use = cash * buy_percentage
             else:
                 # Fallback to the original fixed percentage
                 amount_to_use = cash * 0.95
-
+                
             # Calculate shares to buy
             shares_to_buy = amount_to_use / price if price > 0 else 0
 
@@ -349,7 +334,7 @@ def simulate_portfolio(signals_df, price_data, initial_capital=100000):
             if current_rank is not None:
                 # Use the ranking-based sell percentage from backtest_individual.py
                 total_assets = len(prices_dataset)
-
+                
                 # Calculate sell percentage using the same formula as in backtest_individual.py
                 def calculate_sell_percentage(rank, total_assets):
                     # Calculate cutoff points
@@ -365,7 +350,7 @@ def simulate_portfolio(signals_df, price_data, initial_capital=100000):
                     wave = 0.1 * np.sin(2 * np.pi * x)  # Oscillation between -0.1 and 0.1
                     linear = 0.3 + 0.7 * x  # Linear increase from 0.3 to 1.0
                     return max(0.1, min(1.0, linear + wave))  # Clamp between 0.1 and 1.0
-
+                
                 sell_percentage = calculate_sell_percentage(current_rank, total_assets)
                 shares_to_sell = position * sell_percentage
                 cash += shares_to_sell * price
@@ -402,22 +387,22 @@ def backtest_calculate_ranking(prices_dataset, current_time, lookback_days_param
     """
     Calculate performance ranking of all symbols over the last N days,
     using the same logic as in backtest_individual.py
-
+    
     Args:
         prices_dataset: Dictionary of price dataframes keyed by symbol
         current_time: Current time to use as the reference point
         lookback_days_param: Number of days to look back
-
+        
     Returns:
         DataFrame with performance and rank columns
     """
     performance_dict = {}
     lookback_days = lookback_days_param
-
+    
     # Convert current_time to pandas Timestamp if it's not already
     if not isinstance(current_time, pd.Timestamp):
         current_time = pd.Timestamp(current_time)
-
+    
     lookback_time = current_time - pd.Timedelta(days=lookback_days)
 
     # Try to load best_params.json for strategy performance data
@@ -449,24 +434,26 @@ def backtest_calculate_ranking(prices_dataset, current_time, lookback_days_param
                 start_price = symbol_data['close'].iloc[0]
                 end_price = symbol_data['close'].iloc[-1]
                 performance = ((end_price - start_price) / start_price) * 100
-
+                
                 # Check if we should use strategy performance instead
                 if symbol in best_params_data:
                     symbol_entry = best_params_data[symbol]
-
+                    
                     # Check if entry is recent (less than a week old)
                     if 'date' in symbol_entry:
                         entry_date = datetime.strptime(symbol_entry['date'], "%Y-%m-%d")
                         is_recent = (datetime.now() - entry_date) < timedelta(weeks=1)
-
+                        
                         # Use strategy performance if entry is recent and has performance data
                         if is_recent and 'metrics' in symbol_entry and 'performance' in symbol_entry['metrics']:
                             performance = symbol_entry['metrics']['performance']
 
                 # Store the final performance value
                 performance_dict[symbol] = performance
-
-                # Debug performance prints removed
+                
+                # Print symbol and performance (debug information)
+                if symbol == selected_symbol:
+                    st.write(f"Debug: {symbol} performance: {performance:.2f}%")
         except Exception as e:
             pass
 
@@ -475,9 +462,8 @@ def backtest_calculate_ranking(prices_dataset, current_time, lookback_days_param
         perf_df = pd.DataFrame.from_dict(performance_dict, 
                                         orient='index', 
                                         columns=['performance'])
-            # Sort by performance descending and calculate percentile rank
-        perf_df = perf_df.sort_values('performance', ascending=False)
-        perf_df['rank'] = (perf_df['performance'].rank(ascending=False) / len(perf_df)) * 100
+        perf_df['rank'] = perf_df['performance'].rank(pct=True)  # Percentile ranking
+        
         return perf_df
     return None
 
@@ -503,7 +489,7 @@ def calculate_performance_ranking(prices_dataset=None, lookback_days=15):
     # Use the backtest ranking function to calculate rankings
     if prices_dataset:
         return backtest_calculate_ranking(prices_dataset, pd.Timestamp.now(), lookback_days)
-
+    
     return None
 
 # Function to update the charts
@@ -531,11 +517,6 @@ def update_charts():
         st.warning("Could not generate signals. Please try a different timeframe or lookback period.")
         return
 
-    # Simulate portfolio early to get rank information for signals
-    portfolio_df = None
-    if enable_simulation:
-        portfolio_df = simulate_portfolio(signals_df, df, initial_capital=initial_capital)
-
     # Create price chart (without the composite indicators)
     fig1 = make_subplots(rows=1, cols=1)
 
@@ -556,62 +537,26 @@ def update_charts():
         # Get points where signal is 1 (buy)
         buy_signals = signals_df[signals_df['signal'] == 1]
         if not buy_signals.empty:
-            # Prepare hover text with rank information if available
-            hover_texts = []
-            for idx in buy_signals.index:
-                price = df.loc[idx, 'close']
-                rank_info = ""
-
-                # Add rank information if portfolio simulation is enabled and we have the data
-                if portfolio_df is not None and not portfolio_df.empty and idx in portfolio_df.index:
-                    rank = portfolio_df.loc[idx, 'rank']
-                    if rank is not None:
-                        rank_info = f"<br>Rank: {int(rank)}"
-
-                hover_texts.append(f"BUY<br>Price: ${price:.2f}{rank_info}")
-
             fig1.add_trace(
                 go.Scatter(
                     x=buy_signals.index, 
                     y=df.loc[buy_signals.index, 'high'] * 1.01,  # Slightly above the candle
-                    mode='markers+text',
+                    mode='markers',
                     marker=dict(symbol='triangle-up', size=15, color='green'),
-                    name="Buy Signal",
-                    text=[f"R:{int(portfolio_df.loc[idx, 'rank'])}" if portfolio_df is not None and idx in portfolio_df.index and portfolio_df.loc[idx, 'rank'] is not None else "" for idx in buy_signals.index],
-                    textposition="top center",
-                    hoverinfo="text",
-                    hovertext=hover_texts
+                    name="Buy Signal"
                 )
             )
 
         # Get points where signal is -1 (sell)
         sell_signals = signals_df[signals_df['signal'] == -1]
         if not sell_signals.empty:
-            # Prepare hover text with rank information if available
-            hover_texts = []
-            for idx in sell_signals.index:
-                price = df.loc[idx, 'close']
-                rank_info = ""
-
-                # Add rank information if portfolio simulation is enabled and we have the data
-                if portfolio_df is not None and not portfolio_df.empty and idx in portfolio_df.index:
-                    rank = portfolio_df.loc[idx, 'rank']
-                    if rank is not None:
-                        rank_info = f"<br>Rank: {int(rank)}"
-
-                hover_texts.append(f"SELL<br>Price: ${price:.2f}{rank_info}")
-
             fig1.add_trace(
                 go.Scatter(
                     x=sell_signals.index, 
                     y=df.loc[sell_signals.index, 'low'] * 0.99,  # Slightly below the candle
-                    mode='markers+text',
+                    mode='markers',
                     marker=dict(symbol='triangle-down', size=15, color='red'),
-                    name="Sell Signal",
-                    text=[f"R:{int(portfolio_df.loc[idx, 'rank'])}" if portfolio_df is not None and idx in portfolio_df.index and portfolio_df.loc[idx, 'rank'] is not None else "" for idx in sell_signals.index],
-                    textposition="bottom center",
-                    hoverinfo="text",
-                    hovertext=hover_texts
+                    name="Sell Signal"
                 )
             )
 
@@ -929,18 +874,10 @@ def update_charts():
                 daily_composite = row.get('daily_composite', 'N/A')
                 weekly_composite = row.get('weekly_composite', 'N/A')
 
-                # Add rank information if available
-                rank_display = "N/A"
-                if portfolio_df is not None and not portfolio_df.empty and idx in portfolio_df.index:
-                    rank = portfolio_df.loc[idx, 'rank']
-                    if rank is not None:
-                        rank_display = f"{int(rank)}"
-
                 signal_display.append({
                     "Time": idx.strftime("%Y-%m-%d %H:%M"),
                     "Signal": signal_type,
                     "Price": f"${price:.2f}",
-                    "Rank": rank_display,
                     "Daily Composite": f"{daily_composite:.4f}" if isinstance(daily_composite, (int, float)) else daily_composite,
                     "Weekly Composite": f"{weekly_composite:.4f}" if isinstance(weekly_composite, (int, float)) else weekly_composite
                 })
@@ -1031,104 +968,46 @@ def update_charts():
                 st.info("No signals available to simulate portfolio. Try a different timeframe or symbol.")
 
     # Add asset performance comparison
-    with performance_placeholder.container():
-        st.subheader("Asset Performance Comparison")
-        performance_df = calculate_performance_ranking(lookback_days=lookback_days)
+    st.subheader("Asset Performance Comparison")
+    performance_df = calculate_performance_ranking(lookback_days=lookback_days)
 
-        if performance_df is not None and not performance_df.empty:
-            # Create a bar chart for the performance ranking
-            fig_perf = go.Figure()
+    if performance_df is not None and not performance_df.empty:
+        # Create a bar chart for the performance ranking
+        fig_perf = go.Figure()
 
-            # Sort by performance descending
-            performance_df = performance_df.sort_values('performance', ascending=False)
+        # Sort by performance descending
+        performance_df = performance_df.sort_values('performance', ascending=False)
 
-            # Add bars with rank information
-            fig_perf.add_trace(
-                go.Bar(
-                    x=performance_df.index,
-                    y=performance_df['performance'],
-                    marker_color=['green' if x > 0 else 'red' for x in performance_df['performance']],
-                    text=[f"{x:.2f}%" for x in performance_df['performance']],
-                    textposition='outside',
-                    hovertext=[f"Rank: {r:.2f}" for r in performance_df['rank']],
-                    hoverinfo='text'
-                )
+        # Add bars
+        fig_perf.add_trace(
+            go.Bar(
+                x=performance_df.index,
+                y=performance_df['performance'],
+                marker_color=['green' if x > 0 else 'red' for x in performance_df['performance']],
+                text=[f"{x:.2f}%" for x in performance_df['performance']],
+                textposition='outside'
             )
+        )
 
-            # Update layout
-            fig_perf.update_layout(
-                title="Performance Over Selected Period",
-                yaxis_title="% Change",
-                height=400,
-                margin=dict(l=0, r=0, t=40, b=0)
-            )
+        # Update layout
+        fig_perf.update_layout(
+            title="Performance Over Selected Period",
+            yaxis_title="% Change",
+            height=400,
+            margin=dict(l=0, r=0, t=40, b=0)
+        )
 
-            # Display the performance chart
-            st.plotly_chart(fig_perf, use_container_width=True, key=f"perf_chart_{int(time.time())}")
+        # Display the performance chart
+        st.plotly_chart(fig_perf, use_container_width=True, key=f"perf_chart_{int(time.time())}")
 
-            # Display a table with more details
-            performance_df['performance'] = performance_df['performance'].apply(lambda x: f"{x:.2f}%")
-            performance_df['rank'] = performance_df['rank'].apply(lambda x: f"{x*100:.1f}%")
-            performance_df.columns = ['Performance', 'Percentile Rank']
+        # Display a table with more details
+        performance_df['performance'] = performance_df['performance'].apply(lambda x: f"{x:.2f}%")
+        performance_df['rank'] = performance_df['rank'].apply(lambda x: f"{x*100:.1f}%")
+        performance_df.columns = ['Performance', 'Percentile Rank']
 
-            st.dataframe(performance_df, use_container_width=True)
-        else:
-            st.error("Unable to calculate performance ranking. Try a different timeframe.")
-
-    # Display best parameters for selected symbol
-    st.subheader(f"Best Parameters for {selected_symbol}")
-    try:
-        params = None
-        source = None
-
-        # Try Replit Object Storage first
-        try:
-            from replit.object_storage import Client
-            client = Client()
-            json_content = client.download_as_text("best_params.json")
-            best_params_data = json.loads(json_content)
-            if selected_symbol in best_params_data:
-                params = best_params_data[selected_symbol]
-                source = "Replit Object Storage"
-        except Exception:
-            # Try local file as fallback
-            try:
-                with open("best_params.json", "r") as f:
-                    best_params_data = json.load(f)
-                    if selected_symbol in best_params_data:
-                        params = best_params_data[selected_symbol]
-                        source = "Local File"
-            except FileNotFoundError:
-                pass
-
-        if params:
-            st.info(f"Parameters source: {source}")
-            best_params = params['best_params']
-            metrics = params.get('metrics', {})
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("Parameters:")
-                st.json({
-                    "MACD Weight": round(best_params.get('macd_weight', 0), 2),
-                    "RSI Weight": round(best_params.get('rsi_weight', 0), 2),
-                    "Stoch Weight": round(best_params.get('stoch_weight', 0), 2),
-                    "Fractal Weight": round(best_params.get('fractal_weight', 0), 2),
-                    "Reactivity": round(best_params.get('reactivity', 0), 2)
-                })
-
-            with col2:
-                st.write("Performance Metrics:")
-                st.json({
-                    "Performance": f"{metrics.get('performance', 0):.2f}%",
-                    "Win Rate": f"{metrics.get('win_rate', 0):.1f}%",
-                    "Max Drawdown": f"{metrics.get('max_drawdown', 0):.2f}%"
-                })
-        else:
-            st.info("No parameter data available")
-
-    except Exception as e:
-        st.warning(f"Could not load best parameters: {str(e)}")
+        st.dataframe(performance_df, use_container_width=True)
+    else:
+        st.info("Unable to calculate performance ranking. Try a different timeframe.")
 
     # Show last update time
     st.caption(f"Last updated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
