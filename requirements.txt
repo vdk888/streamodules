@@ -7,3 +7,7 @@ pytz>=2025.1
 replit>=4.1.1
 streamlit>=1.43.2
 yfinance>=0.2.54
+fastapi
+python-dotenv
+uvicorn
+websockets
