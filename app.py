@@ -1192,133 +1192,182 @@ def update_charts():
 
     # Backtest section
     if 'run_backtest' in st.session_state and st.session_state['run_backtest']:
-        st.subheader("Backtest Results")
-        with st.spinner(f"Running backtest for {selected_symbol} over {backtest_days} days..."):
-            try:
-                # Run the backtest using the imported run_backtest function
-                backtest_result = run_backtest(selected_symbol, days=backtest_days, initial_capital=initial_capital)
-                
-                # Create backtest plots
-                fig_buf, stats_text = create_backtest_plot(backtest_result)
-                
-                # Show the figure
-                st.image(fig_buf, use_column_width=True)
-                
-                # Show statistics
-                st.markdown("### Backtest Statistics")
-                st.text(stats_text)
-                
-                # Show detailed statistics
-                st.markdown("### Detailed Metrics")
-                stats = backtest_result['stats']
-                
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Final Value", f"${stats['final_value']:,.2f}")
-                col2.metric("Total Return", f"{stats['total_return']:.2f}%")
-                col3.metric("Max Drawdown", f"{stats['max_drawdown']:.2f}%")
-                
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Total Trades", f"{stats['total_trades']}")
-                col2.metric("Win Rate", f"{stats['win_rate'] * 100:.2f}%")
-                col3.metric("Sharpe Ratio", f"{stats['sharpe_ratio']:.2f}")
-                
-                # Show detailed trades
-                st.markdown("### Trades")
-                trades_df = pd.DataFrame(backtest_result['trades'])
-                if not trades_df.empty:
-                    # Format trades for display
-                    trades_display = []
-                    for _, trade in trades_df.iterrows():
-                        trades_display.append({
-                            'Time': trade['time'].strftime('%Y-%m-%d %H:%M'),
-                            'Type': trade['type'].upper(),
-                            'Price': f"${trade['price']:.2f}",
-                            'Shares': f"{trade['shares']:.6f}",
-                            'Value': f"${trade['value']:.2f}",
-                            'Position': f"{trade['total_position']:.6f}"
-                        })
-                    st.table(pd.DataFrame(trades_display))
-                else:
-                    st.info("No trades were executed during the backtest period.")
-                
-                # Reset the backtest flag
-                st.session_state['run_backtest'] = False
-                
-            except Exception as e:
-                st.error(f"Error running backtest: {str(e)}")
-                st.session_state['run_backtest'] = False
+        with tab2:
+            with st.spinner(f"Running backtest for {selected_symbol} over {backtest_days} days..."):
+                try:
+                    # Run the backtest using the imported run_backtest function from backtest.py
+                    backtest_result = run_backtest(selected_symbol, days=backtest_days, initial_capital=initial_capital)
+                    
+                    # Create backtest plots
+                    fig_buf, stats_text = create_backtest_plot(backtest_result)
+                    
+                    # Show the figure in the backtest plot placeholder
+                    backtest_plot_placeholder.image(fig_buf, use_column_width=True)
+                    
+                    # Show statistics and metrics in the metrics placeholder
+                    with backtest_metrics_placeholder.container():
+                        st.markdown("### Backtest Statistics")
+                        st.text(stats_text)
+                        
+                        # Show detailed statistics
+                        st.markdown("### Detailed Metrics")
+                        stats = backtest_result['stats']
+                        
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Final Value", f"${stats['final_value']:,.2f}")
+                        col2.metric("Total Return", f"{stats['total_return']:.2f}%")
+                        col3.metric("Max Drawdown", f"{stats['max_drawdown']:.2f}%")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Total Trades", f"{stats['total_trades']}")
+                        col2.metric("Win Rate", f"{stats['win_rate'] * 100:.2f}%")
+                        col3.metric("Sharpe Ratio", f"{stats['sharpe_ratio']:.2f}")
+                    
+                    # Show detailed trades in the results placeholder
+                    with backtest_results_placeholder.container():
+                        st.markdown("### Trades")
+                        trades_df = pd.DataFrame(backtest_result['trades'])
+                        if not trades_df.empty:
+                            # Format trades for display
+                            trades_display = []
+                            for _, trade in trades_df.iterrows():
+                                trades_display.append({
+                                    'Time': trade['time'].strftime('%Y-%m-%d %H:%M'),
+                                    'Type': trade['type'].upper(),
+                                    'Price': f"${trade['price']:.2f}",
+                                    'Shares': f"{trade['shares']:.6f}",
+                                    'Value': f"${trade['value']:.2f}",
+                                    'Position': f"{trade['total_position']:.6f}"
+                                })
+                            st.table(pd.DataFrame(trades_display))
+                            
+                            # If export is enabled, offer CSV download
+                            if export_backtest:
+                                # Format trades for CSV export
+                                for col in ['time']:
+                                    if col in trades_df.columns:
+                                        trades_df[col] = trades_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                                csv = trades_df.to_csv(index=False)
+                                
+                                st.download_button(
+                                    label="Download trades CSV",
+                                    data=csv,
+                                    file_name=f"{selected_symbol.replace('/', '_')}_trades.csv",
+                                    mime='text/csv'
+                                )
+                        else:
+                            st.info("No trades were executed during the backtest period.")
+                    
+                    # Reset the backtest flag
+                    st.session_state['run_backtest'] = False
+                    
+                except Exception as e:
+                    backtest_results_placeholder.error(f"Error running backtest: {str(e)}")
+                    st.session_state['run_backtest'] = False
     
     # Portfolio backtest section
     if 'run_portfolio_backtest' in st.session_state and st.session_state['run_portfolio_backtest']:
-        st.subheader("Portfolio Backtest Results")
-        with st.spinner(f"Running portfolio backtest for {len(st.session_state['portfolio_symbols'])} symbols over {backtest_days} days..."):
-            try:
-                # Update progress for each symbol
-                def progress_callback(symbol):
-                    st.text(f"Processing {symbol}...")
-                
-                # Run the portfolio backtest using the imported run_portfolio_backtest function
-                portfolio_result = run_portfolio_backtest(
-                    st.session_state['portfolio_symbols'], 
-                    days=backtest_days,
-                    progress_callback=progress_callback
-                )
-                
-                # Create portfolio backtest plots
-                portfolio_fig = create_portfolio_backtest_plot(portfolio_result)
-                portfolio_prices_fig = create_portfolio_with_prices_plot(portfolio_result)
-                
-                # Show the figures
-                st.markdown("### Portfolio Performance")
-                st.image(portfolio_fig, use_column_width=True)
-                
-                st.markdown("### Asset Price Comparison")
-                st.image(portfolio_prices_fig, use_column_width=True)
-                
-                # Show portfolio metrics
-                st.markdown("### Portfolio Metrics")
-                metrics = portfolio_result['metrics']
-                
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Initial Capital", f"${metrics['initial_capital']:,.2f}")
-                col2.metric("Final Value", f"${metrics['final_value']:,.2f}")
-                col3.metric("Total Return", f"{metrics['total_return']:.2f}%")
-                
-                col1, col2 = st.columns(2)
-                col1.metric("Max Drawdown", f"{metrics['max_drawdown']:.2f}%")
-                if 'trading_costs' in metrics:
-                    col2.metric("Trading Costs", f"${metrics['trading_costs']:,.2f}")
-                
-                # Show individual asset performance
-                st.markdown("### Individual Asset Performance")
-                
-                if 'symbol_returns' in metrics:
-                    symbol_returns = metrics['symbol_returns']
-                    returns_data = []
+        with tab3:
+            with st.spinner(f"Running portfolio backtest for {len(portfolio_symbols)} symbols over {backtest_days} days..."):
+                try:
+                    # Store portfolio symbols in session state
+                    st.session_state['portfolio_symbols'] = portfolio_symbols
                     
-                    for symbol, ret in symbol_returns.items():
-                        symbol_result = portfolio_result['individual_results'][symbol]
-                        symbol_stats = symbol_result['stats']
+                    # Update progress for each symbol
+                    def progress_callback(symbol):
+                        st.text(f"Processing {symbol}...")
+                    
+                    # Run the portfolio backtest using the imported run_portfolio_backtest function from backtest.py
+                    portfolio_result = run_portfolio_backtest(
+                        st.session_state['portfolio_symbols'], 
+                        days=backtest_days,
+                        progress_callback=progress_callback
+                    )
+                    
+                    # Create portfolio backtest plots
+                    portfolio_fig = create_portfolio_backtest_plot(portfolio_result)
+                    portfolio_prices_fig = create_portfolio_with_prices_plot(portfolio_result)
+                    
+                    # Show the figures in their placeholders
+                    with portfolio_plot_placeholder.container():
+                        st.markdown("### Portfolio Performance")
+                        st.image(portfolio_fig, use_column_width=True)
                         
-                        returns_data.append({
-                            'Symbol': symbol,
-                            'Return': f"{ret:.2f}%", 
-                            'Trades': symbol_stats['total_trades'],
-                            'Win Rate': f"{symbol_stats['win_rate'] * 100:.2f}%",
-                            'Max Drawdown': f"{symbol_stats['max_drawdown']:.2f}%",
-                            'Sharpe': f"{symbol_stats.get('sharpe_ratio', 0):.2f}"
-                        })
+                        st.markdown("### Asset Price Comparison")
+                        st.image(portfolio_prices_fig, use_column_width=True)
                     
-                    # Sort by return (descending)
-                    returns_data.sort(key=lambda x: float(x['Return'].replace('%', '')), reverse=True)
-                    st.table(pd.DataFrame(returns_data))
-                
-                # Reset the portfolio backtest flag
-                st.session_state['run_portfolio_backtest'] = False
-                
-            except Exception as e:
-                st.error(f"Error running portfolio backtest: {str(e)}")
-                st.session_state['run_portfolio_backtest'] = False
+                    # Show portfolio metrics in the metrics placeholder
+                    with portfolio_metrics_placeholder.container():
+                        st.markdown("### Portfolio Metrics")
+                        metrics = portfolio_result['metrics']
+                        
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Initial Capital", f"${metrics['initial_capital']:,.2f}")
+                        col2.metric("Final Value", f"${metrics['final_value']:,.2f}")
+                        col3.metric("Total Return", f"{metrics['total_return']:.2f}%")
+                        
+                        col1, col2 = st.columns(2)
+                        col1.metric("Max Drawdown", f"{metrics['max_drawdown']:.2f}%")
+                        if 'trading_costs' in metrics:
+                            col2.metric("Trading Costs", f"${metrics['trading_costs']:,.2f}")
+                    
+                    # Show individual asset performance in the comparison placeholder
+                    with portfolio_comparison_placeholder.container():
+                        st.markdown("### Individual Asset Performance")
+                        
+                        if 'symbol_returns' in metrics:
+                            symbol_returns = metrics['symbol_returns']
+                            returns_data = []
+                            
+                            for symbol, ret in symbol_returns.items():
+                                symbol_result = portfolio_result['individual_results'][symbol]
+                                symbol_stats = symbol_result['stats']
+                                
+                                returns_data.append({
+                                    'Symbol': symbol,
+                                    'Return': f"{ret:.2f}%", 
+                                    'Trades': symbol_stats['total_trades'],
+                                    'Win Rate': f"{symbol_stats['win_rate'] * 100:.2f}%",
+                                    'Max Drawdown': f"{symbol_stats['max_drawdown']:.2f}%",
+                                    'Sharpe': f"{symbol_stats.get('sharpe_ratio', 0):.2f}"
+                                })
+                            
+                            # Sort by return (descending)
+                            returns_data.sort(key=lambda x: float(x['Return'].replace('%', '')), reverse=True)
+                            st.table(pd.DataFrame(returns_data))
+                    
+                    # Show export options in the results placeholder if enabled
+                    if export_portfolio_backtest:
+                        with portfolio_backtest_results_placeholder.container():
+                            # Export trades for all symbols
+                            all_trades = []
+                            for symbol, result in portfolio_result['individual_results'].items():
+                                symbol_trades = pd.DataFrame(result['trades'])
+                                if not symbol_trades.empty:
+                                    symbol_trades['symbol'] = symbol
+                                    all_trades.append(symbol_trades)
+                            
+                            if all_trades:
+                                all_trades_df = pd.concat(all_trades)
+                                # Format trades for CSV export
+                                for col in ['time']:
+                                    if col in all_trades_df.columns:
+                                        all_trades_df[col] = all_trades_df[col].dt.strftime('%Y-%m-%d %H:%M:%S')
+                                csv = all_trades_df.to_csv(index=False)
+                                
+                                st.download_button(
+                                    label="Download all trades CSV",
+                                    data=csv,
+                                    file_name="portfolio_trades.csv",
+                                    mime='text/csv'
+                                )
+                    
+                    # Reset the portfolio backtest flag
+                    st.session_state['run_portfolio_backtest'] = False
+                    
+                except Exception as e:
+                    portfolio_backtest_results_placeholder.error(f"Error running portfolio backtest: {str(e)}")
+                    st.session_state['run_portfolio_backtest'] = False
 
 # Main app logic - update continuously
 update_charts()
