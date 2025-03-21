@@ -1,67 +1,140 @@
-import axios from 'axios';
+// API service for the trading platform
 
-// Create axios instance with base URL
-const api = axios.create({
-  baseURL: '/api',
-  timeout: 30000, // 30 seconds timeout
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+// Base API URL
+const API_BASE_URL = 'http://localhost:5000/api';
 
-// API endpoints
-const endpoints = {
-  // Health check
-  health: () => api.get('/health'),
+// Helper function for fetch requests
+const fetchWithTimeout = async (url, options = {}, timeout = 10000) => {
+  const controller = new AbortController();
+  const { signal } = controller;
   
-  // Crypto endpoints
-  getCryptoSymbols: () => api.get('/crypto/symbols'),
-  getCryptoData: (symbol, timeframe = '1h', lookback_days = 15) => 
-    api.get(`/crypto/data/${symbol}`, { params: { timeframe, lookback_days } }),
-  getCryptoRanking: (lookback_days = 15) => 
-    api.get('/crypto/ranking', { params: { lookback_days } }),
-  runCryptoBacktest: (symbol, days = 15, params = null) => 
-    api.post(`/crypto/backtest/${symbol}`, { days, params }),
-  optimizeCryptoParameters: (symbol, days = 15) => 
-    api.post(`/crypto/optimize/${symbol}`, { days }),
-  simulateCryptoPortfolio: (symbols = null, days = 15, initial_capital = 100000.0) => 
-    api.post('/crypto/portfolio/simulate', { symbols, days, initial_capital }),
+  // Set timeout to abort the request if it takes too long
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, { ...options, signal });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    if (error.name === 'AbortError') {
+      throw new Error('Request timed out');
+    }
+    
+    throw error;
+  }
 };
 
-// WebSocket connection handler
-const connectWebSocket = (symbol, onMessage) => {
-  const ws = new WebSocket(`ws://${window.location.host}/ws/crypto/${symbol}`);
+// API methods
+const apiService = {
+  // Cryptocurrency endpoints
   
-  ws.onopen = () => {
-    console.log(`WebSocket connected for ${symbol}`);
-  };
-  
-  ws.onmessage = (event) => {
+  // Get available symbols
+  getSymbols: async () => {
     try {
-      const data = JSON.parse(event.data);
-      onMessage(data);
+      return await fetchWithTimeout(`${API_BASE_URL}/crypto/symbols`);
     } catch (error) {
-      console.error('Error parsing WebSocket data:', error);
+      console.error('Error fetching symbols:', error);
+      throw error;
     }
-  };
+  },
   
-  ws.onerror = (error) => {
-    console.error('WebSocket error:', error);
-  };
-  
-  ws.onclose = () => {
-    console.log(`WebSocket disconnected for ${symbol}`);
-  };
-  
-  // Return object with close method
-  return {
-    close: () => {
-      ws.close();
+  // Get data for a specific symbol
+  getSymbolData: async (symbol, timeframe = '1h', lookbackDays = 15) => {
+    try {
+      return await fetchWithTimeout(
+        `${API_BASE_URL}/crypto/data/${encodeURIComponent(symbol)}?timeframe=${timeframe}&lookback_days=${lookbackDays}`
+      );
+    } catch (error) {
+      console.error(`Error fetching data for ${symbol}:`, error);
+      throw error;
     }
-  };
+  },
+  
+  // Get performance ranking
+  getPerformanceRanking: async (lookbackDays = 15) => {
+    try {
+      return await fetchWithTimeout(
+        `${API_BASE_URL}/crypto/ranking?lookback_days=${lookbackDays}`
+      );
+    } catch (error) {
+      console.error('Error fetching performance ranking:', error);
+      throw error;
+    }
+  },
+  
+  // Run backtest for a specific symbol
+  runBacktest: async (symbol, days = 15, params = null) => {
+    try {
+      return await fetchWithTimeout(
+        `${API_BASE_URL}/crypto/backtest/${encodeURIComponent(symbol)}`, 
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ days, params }),
+        }
+      );
+    } catch (error) {
+      console.error(`Error running backtest for ${symbol}:`, error);
+      throw error;
+    }
+  },
+  
+  // Optimize parameters for a specific symbol
+  optimizeParameters: async (symbol, days = 15) => {
+    try {
+      return await fetchWithTimeout(
+        `${API_BASE_URL}/crypto/optimize/${encodeURIComponent(symbol)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ days }),
+        }
+      );
+    } catch (error) {
+      console.error(`Error optimizing parameters for ${symbol}:`, error);
+      throw error;
+    }
+  },
+  
+  // Simulate portfolio performance
+  simulatePortfolio: async (symbols = null, days = 15, initialCapital = 100000.0) => {
+    try {
+      return await fetchWithTimeout(
+        `${API_BASE_URL}/crypto/portfolio/simulate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ symbols, days, initial_capital: initialCapital }),
+        }
+      );
+    } catch (error) {
+      console.error('Error simulating portfolio:', error);
+      throw error;
+    }
+  },
+  
+  // Health check
+  healthCheck: async () => {
+    try {
+      return await fetchWithTimeout(`${API_BASE_URL}/health`);
+    } catch (error) {
+      console.error('Error checking API health:', error);
+      throw error;
+    }
+  },
 };
 
-export default {
-  ...endpoints,
-  connectWebSocket,
-};
+export default apiService;

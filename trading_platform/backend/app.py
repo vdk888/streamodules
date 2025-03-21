@@ -2,18 +2,17 @@
 FastAPI backend for the trading platform
 """
 import os
-import json
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Depends
+import time
+import asyncio
+import logging
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from typing import Dict, List, Optional, Any
-import logging
-import asyncio
-import time
-from datetime import datetime
+from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
+import json
 
-# Import crypto services
-from ..modules.crypto.service import CryptoService
+from trading_platform.modules.crypto.service import CryptoService
 
 # Configure logging
 logging.basicConfig(
@@ -22,17 +21,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
+# Initialize FastAPI app
 app = FastAPI(
-    title="Trading Platform API",
-    description="API for cryptocurrency trading platform",
-    version="0.1.0"
+    title="Crypto Trading Platform API",
+    description="API for cryptocurrency trading platform with real-time data and analysis",
+    version="1.0.0"
 )
 
-# Configure CORS
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with your frontend URL
+    allow_origins=["*"],  # For development; restrict in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,30 +41,27 @@ app.add_middleware(
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, List[WebSocket]] = {}
-    
+
     async def connect(self, websocket: WebSocket, symbol: str):
         await websocket.accept()
         if symbol not in self.active_connections:
             self.active_connections[symbol] = []
         self.active_connections[symbol].append(websocket)
-        logger.info(f"WebSocket client connected for {symbol}. Total clients: {len(self.active_connections[symbol])}")
-    
+
     def disconnect(self, websocket: WebSocket, symbol: str):
         if symbol in self.active_connections:
             if websocket in self.active_connections[symbol]:
                 self.active_connections[symbol].remove(websocket)
-            logger.info(f"WebSocket client disconnected from {symbol}. Remaining clients: {len(self.active_connections[symbol])}")
-    
+            if not self.active_connections[symbol]:
+                del self.active_connections[symbol]
+
     async def send_personal_message(self, message: str, websocket: WebSocket):
         await websocket.send_text(message)
-    
+
     async def broadcast(self, message: str, symbol: str):
         if symbol in self.active_connections:
             for connection in self.active_connections[symbol]:
-                try:
-                    await connection.send_text(message)
-                except Exception as e:
-                    logger.error(f"Error sending message to client: {str(e)}")
+                await connection.send_text(message)
 
 # Initialize connection manager
 manager = ConnectionManager()
@@ -73,20 +69,27 @@ manager = ConnectionManager()
 # Health check endpoint
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+    return {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "version": "1.0.0"
+    }
 
-# Crypto endpoints
+# Cryptocurrency endpoints
 @app.get("/api/crypto/symbols")
 async def get_crypto_symbols():
     try:
         symbols = CryptoService.get_available_symbols()
-        return {"success": True, "symbols": symbols}
+        return {
+            "success": True,
+            "symbols": symbols
+        }
     except Exception as e:
         logger.error(f"Error getting crypto symbols: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 @app.get("/api/crypto/data/{symbol}")
 async def get_crypto_data(
@@ -95,149 +98,163 @@ async def get_crypto_data(
     lookback_days: int = Query(15, description="Number of days to look back")
 ):
     try:
-        data = CryptoService.get_symbol_data(symbol, timeframe, lookback_days)
-        return {
-            "success": True,
-            "price_data": data["price_data"].reset_index().to_dict(orient="records") if "price_data" in data else [],
-            "signals_data": data["signals_data"].reset_index().to_dict(orient="records") if "signals_data" in data else []
-        }
+        result = CryptoService.get_symbol_data(symbol, timeframe, lookback_days)
+        return result
     except Exception as e:
         logger.error(f"Error getting crypto data: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 @app.get("/api/crypto/ranking")
 async def get_crypto_ranking(
     lookback_days: int = Query(15, description="Number of days to look back")
 ):
     try:
-        ranking_data = CryptoService.get_performance_ranking(lookback_days)
-        return {"success": True, "ranking": ranking_data}
+        result = CryptoService.get_performance_ranking(lookback_days)
+        return result
     except Exception as e:
-        logger.error(f"Error getting crypto ranking: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
+        logger.error(f"Error getting performance ranking: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+# Pydantic models for request data
+class BacktestRequest(BaseModel):
+    days: int = 15
+    params: Optional[Dict[str, Any]] = None
 
 @app.post("/api/crypto/backtest/{symbol}")
 async def run_crypto_backtest(
     symbol: str,
-    days: int = 15,
-    params: Optional[Dict[str, Any]] = None
+    request: BacktestRequest
 ):
     try:
-        backtest_result = CryptoService.run_backtest(symbol, days, params)
-        return {"success": True, "backtest_result": backtest_result}
+        result = CryptoService.run_backtest(symbol, request.days, request.params)
+        return result
     except Exception as e:
-        logger.error(f"Error running crypto backtest: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
+        logger.error(f"Error running backtest: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+class OptimizeRequest(BaseModel):
+    days: int = 15
 
 @app.post("/api/crypto/optimize/{symbol}")
 async def optimize_crypto_parameters(
     symbol: str,
-    days: int = 15
+    request: OptimizeRequest
 ):
     try:
-        optimization_result = CryptoService.optimize_parameters(symbol, days)
-        return {"success": True, "optimization_result": optimization_result}
+        result = CryptoService.optimize_parameters(symbol, request.days)
+        return result
     except Exception as e:
-        logger.error(f"Error optimizing crypto parameters: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
+        logger.error(f"Error optimizing parameters: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+class PortfolioRequest(BaseModel):
+    symbols: Optional[List[str]] = None
+    days: int = 15
+    initial_capital: float = 100000.0
 
 @app.post("/api/crypto/portfolio/simulate")
 async def simulate_crypto_portfolio(
-    symbols: Optional[List[str]] = None,
-    days: int = 15,
-    initial_capital: float = 100000.0
+    request: PortfolioRequest
 ):
     try:
-        simulation_result = CryptoService.simulate_portfolio(symbols, days, initial_capital)
-        return {"success": True, "simulation_result": simulation_result}
-    except Exception as e:
-        logger.error(f"Error simulating crypto portfolio: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
+        result = CryptoService.simulate_portfolio(
+            request.symbols, request.days, request.initial_capital
         )
+        return result
+    except Exception as e:
+        logger.error(f"Error simulating portfolio: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
-# WebSocket endpoint for real-time updates
+# WebSocket endpoint for real-time data
 @app.websocket("/ws/crypto/{symbol}")
 async def websocket_crypto_endpoint(websocket: WebSocket, symbol: str):
     await manager.connect(websocket, symbol)
-    
-    # Create update task for real-time data
-    update_task = None
-    
     try:
-        # Start background task for updates
-        update_task = asyncio.create_task(send_updates(websocket, symbol))
+        # Start background task for sending updates
+        task = asyncio.create_task(send_updates(websocket, symbol))
         
-        # Keep connection open and handle disconnection
+        # Wait for client messages (e.g., configuration changes)
         while True:
             data = await websocket.receive_text()
-            
-            # You can handle client messages here if needed
-            logger.info(f"Received message from client: {data}")
-            
+            try:
+                message = json.loads(data)
+                # Handle client messages (e.g., change timeframe)
+                if "timeframe" in message:
+                    # Can implement logic to change update frequency
+                    await manager.send_personal_message(
+                        json.dumps({
+                            "success": True,
+                            "message": f"Timeframe changed to {message['timeframe']}"
+                        }),
+                        websocket
+                    )
+            except json.JSONDecodeError:
+                await manager.send_personal_message(
+                    json.dumps({
+                        "success": False,
+                        "error": "Invalid JSON"
+                    }),
+                    websocket
+                )
     except WebSocketDisconnect:
         manager.disconnect(websocket, symbol)
+        # Cancel the background task
+        task.cancel()
     except Exception as e:
         logger.error(f"WebSocket error: {str(e)}")
-    finally:
-        # Cancel update task when disconnected
-        if update_task:
-            update_task.cancel()
-            try:
-                await update_task
-            except asyncio.CancelledError:
-                pass
+        manager.disconnect(websocket, symbol)
+        # Cancel the background task
+        task.cancel()
 
 async def send_updates(websocket: WebSocket, symbol: str):
     """Background task to send real-time updates to WebSocket clients"""
     try:
-        # Get update interval based on symbol/asset class
-        # For simplicity, use 5 seconds for all
-        update_interval = 5  
+        timeframe = "1h"  # Default timeframe
+        lookback_days = 15  # Default lookback days
         
         while True:
-            try:
-                # Fetch latest data
-                data = CryptoService.get_symbol_data(symbol, "1h", 15)
-                
-                # Prepare response data
-                response_data = {
-                    "success": True,
-                    "timestamp": datetime.now().isoformat(),
-                    "symbol": symbol,
-                    "price_data": data["price_data"].reset_index().to_dict(orient="records") if "price_data" in data else [],
-                    "signals_data": data["signals_data"].reset_index().to_dict(orient="records") if "signals_data" in data else []
-                }
-                
-                # Send update to client
-                await websocket.send_text(json.dumps(response_data))
-                
-            except Exception as e:
-                # Send error to client
-                error_data = {
-                    "success": False,
-                    "timestamp": datetime.now().isoformat(),
-                    "error": str(e)
-                }
-                await websocket.send_text(json.dumps(error_data))
+            # Get the latest data
+            result = CryptoService.get_symbol_data(symbol, timeframe, lookback_days)
             
-            # Wait for next update
-            await asyncio.sleep(update_interval)
+            # Send updated data to the client
+            await websocket.send_text(json.dumps(result))
             
+            # Wait before next update (adjust based on timeframe)
+            if timeframe == "1m":
+                await asyncio.sleep(10)  # Every 10 seconds for 1-minute data
+            elif timeframe == "5m":
+                await asyncio.sleep(60)  # Every minute for 5-minute data
+            elif timeframe == "15m":
+                await asyncio.sleep(180)  # Every 3 minutes for 15-minute data
+            elif timeframe == "30m":
+                await asyncio.sleep(300)  # Every 5 minutes for 30-minute data
+            elif timeframe == "1h":
+                await asyncio.sleep(600)  # Every 10 minutes for 1-hour data
+            elif timeframe == "4h":
+                await asyncio.sleep(1800)  # Every 30 minutes for 4-hour data
+            else:
+                await asyncio.sleep(3600)  # Every hour for daily data
+                
     except asyncio.CancelledError:
-        # Task was cancelled, clean up
+        # Task was cancelled due to client disconnect
         logger.info(f"Update task for {symbol} cancelled")
-        raise
+    except Exception as e:
+        logger.error(f"Error in send_updates for {symbol}: {str(e)}")
+
+# Create the FastAPI app
+app = FastAPI()

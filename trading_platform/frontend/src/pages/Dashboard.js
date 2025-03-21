@@ -1,142 +1,163 @@
-import React, { useEffect, useState } from 'react';
-import api from '../services/api';
-import PriceChart from '../components/PriceChart';
+import React, { useState, useEffect } from 'react';
 import SymbolSelector from '../components/SymbolSelector';
+import PriceChart from '../components/PriceChart';
 import BacktestResults from '../components/BacktestResults';
 
-const Dashboard = () => {
-  const [symbols, setSymbols] = useState([]);
-  const [selectedSymbol, setSelectedSymbol] = useState('BTC/USD');
+function Dashboard({ symbols, currentSymbol, onSymbolChange, apiBaseUrl, isLoading }) {
+  // State variables
   const [timeframe, setTimeframe] = useState('1h');
   const [lookbackDays, setLookbackDays] = useState(15);
   const [priceData, setPriceData] = useState([]);
   const [signalsData, setSignalsData] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isDataLoading, setIsDataLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [wsConnection, setWsConnection] = useState(null);
-  const [backtestResults, setBacktestResults] = useState(null);
-  const [isBacktesting, setIsBacktesting] = useState(false);
-  
-  // Fetch available symbols
+  const [performanceRanking, setPerformanceRanking] = useState([]);
+  const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
+  const [webSocket, setWebSocket] = useState(null);
+
+  // Fetch cryptocurrency data
   useEffect(() => {
-    const fetchSymbols = async () => {
-      try {
-        const response = await api.getCryptoSymbols();
-        setSymbols(response.data.symbols);
-        
-        // Set default selected symbol if available
-        if (response.data.symbols.length > 0) {
-          setSelectedSymbol(response.data.symbols[0].symbol);
-        }
-      } catch (err) {
-        console.error('Error fetching symbols:', err);
-        setError('Failed to load symbols. Please try again later.');
-      }
-    };
-    
-    fetchSymbols();
-  }, []);
-  
-  // Fetch price data for selected symbol
-  useEffect(() => {
-    if (!selectedSymbol) return;
-    
     const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
-      
+      if (!currentSymbol) return;
+
+      setIsDataLoading(true);
       try {
-        const response = await api.getCryptoData(selectedSymbol, timeframe, lookbackDays);
-        
-        if (response.data.success) {
-          setPriceData(response.data.price_data);
-          setSignalsData(response.data.signals_data);
+        const response = await fetch(
+          `${apiBaseUrl}/crypto/data/${encodeURIComponent(currentSymbol)}?timeframe=${timeframe}&lookback_days=${lookbackDays}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.success) {
+          setPriceData(data.price_data || []);
+          setSignalsData(data.signals_data || []);
         } else {
-          setError(response.data.error || 'Failed to fetch data');
+          throw new Error(data.error || 'Failed to fetch cryptocurrency data');
         }
       } catch (err) {
-        console.error('Error fetching data:', err);
-        setError('Failed to load data. Please try again later.');
+        setError(err.message);
+        console.error('Error fetching cryptocurrency data:', err);
       } finally {
-        setIsLoading(false);
+        setIsDataLoading(false);
       }
     };
-    
+
     fetchData();
-    
-    // Set up WebSocket connection for real-time updates
-    const ws = api.connectWebSocket(selectedSymbol, (data) => {
-      if (data.success) {
-        setPriceData(data.price_data);
-        setSignalsData(data.signals_data);
-      }
-    });
-    
-    setWsConnection(ws);
-    
-    // Clean up WebSocket connection when component unmounts or symbol changes
-    return () => {
-      if (wsConnection) {
-        wsConnection.close();
+  }, [currentSymbol, timeframe, lookbackDays, apiBaseUrl]);
+
+  // Fetch performance ranking
+  useEffect(() => {
+    const fetchRanking = async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/crypto/ranking?lookback_days=${lookbackDays}`);
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.success && data.ranking) {
+          setPerformanceRanking(data.ranking);
+        } else {
+          throw new Error(data.error || 'Failed to fetch performance ranking');
+        }
+      } catch (err) {
+        console.error('Error fetching performance ranking:', err);
       }
     };
-  }, [selectedSymbol, timeframe, lookbackDays]);
-  
-  const handleSymbolChange = (symbol) => {
-    setSelectedSymbol(symbol);
-    setBacktestResults(null); // Reset backtest results when symbol changes
-  };
-  
-  const handleTimeframeChange = (e) => {
-    setTimeframe(e.target.value);
-  };
-  
-  const handleLookbackDaysChange = (e) => {
-    setLookbackDays(parseInt(e.target.value, 10));
-  };
-  
-  const handleRunBacktest = async () => {
-    setIsBacktesting(true);
-    setError(null);
-    
-    try {
-      const response = await api.runCryptoBacktest(selectedSymbol, lookbackDays);
-      
-      if (response.data.success) {
-        setBacktestResults(response.data.backtest_result);
-      } else {
-        setError(response.data.error || 'Failed to run backtest');
-      }
-    } catch (err) {
-      console.error('Error running backtest:', err);
-      setError('Failed to run backtest. Please try again later.');
-    } finally {
-      setIsBacktesting(false);
+
+    fetchRanking();
+  }, [lookbackDays, apiBaseUrl]);
+
+  // Setup WebSocket connection
+  useEffect(() => {
+    if (!currentSymbol) return;
+
+    // Close existing connection if any
+    if (webSocket) {
+      webSocket.close();
     }
+
+    // WebSocket Host - replace with your actual domain in production
+    const wsHost = window.location.hostname === 'localhost' 
+      ? 'ws://localhost:5000' 
+      : `wss://${window.location.host}`;
+    
+    const ws = new WebSocket(`${wsHost}/ws/crypto/${encodeURIComponent(currentSymbol)}`);
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+      setIsWebSocketConnected(true);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.success) {
+          setPriceData(data.price_data || []);
+          setSignalsData(data.signals_data || []);
+        } else {
+          console.error('WebSocket error:', data.error);
+        }
+      } catch (err) {
+        console.error('Error processing WebSocket message:', err);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+      setIsWebSocketConnected(false);
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      setIsWebSocketConnected(false);
+    };
+
+    setWebSocket(ws);
+
+    // Cleanup on unmount
+    return () => {
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [currentSymbol]);
+
+  // Handle timeframe change
+  const handleTimeframeChange = (newTimeframe) => {
+    setTimeframe(newTimeframe);
   };
-  
+
+  // Handle lookback days change
+  const handleLookbackDaysChange = (newLookbackDays) => {
+    setLookbackDays(newLookbackDays);
+  };
+
+  // Find current symbol ranking
+  const currentSymbolRanking = performanceRanking.find(
+    (item) => item.symbol === currentSymbol
+  );
+
   return (
     <div className="dashboard">
-      <header className="dashboard-header">
-        <h1>Crypto Trading Platform</h1>
-      </header>
-      
-      <div className="controls-section">
-        <div className="symbol-control">
-          <SymbolSelector
-            symbols={symbols}
-            selectedSymbol={selectedSymbol}
-            onSymbolChange={handleSymbolChange}
-          />
-        </div>
+      <div className="dashboard-header">
+        <SymbolSelector
+          symbols={symbols}
+          currentSymbol={currentSymbol}
+          onSymbolChange={onSymbolChange}
+          isLoading={isLoading}
+        />
         
-        <div className="timeframe-control">
-          <label htmlFor="timeframe-select">Timeframe:</label>
+        <div className="timeframe-selector">
+          <label htmlFor="timeframe">Timeframe:</label>
           <select
-            id="timeframe-select"
+            id="timeframe"
             value={timeframe}
-            onChange={handleTimeframeChange}
-            className="form-select"
+            onChange={(e) => handleTimeframeChange(e.target.value)}
           >
             <option value="1h">1 Hour</option>
             <option value="4h">4 Hours</option>
@@ -144,51 +165,157 @@ const Dashboard = () => {
           </select>
         </div>
         
-        <div className="lookback-control">
-          <label htmlFor="lookback-input">Lookback Days:</label>
-          <input
-            id="lookback-input"
-            type="number"
-            min="1"
-            max="90"
+        <div className="lookback-selector">
+          <label htmlFor="lookback">Lookback Days:</label>
+          <select
+            id="lookback"
             value={lookbackDays}
-            onChange={handleLookbackDaysChange}
-            className="form-input"
-          />
+            onChange={(e) => handleLookbackDaysChange(parseInt(e.target.value))}
+          >
+            <option value="7">7 Days</option>
+            <option value="15">15 Days</option>
+            <option value="30">30 Days</option>
+          </select>
         </div>
         
-        <div className="actions-control">
-          <button
-            className="btn backtest-btn"
-            onClick={handleRunBacktest}
-            disabled={isBacktesting}
-          >
-            {isBacktesting ? 'Running Backtest...' : 'Run Backtest'}
-          </button>
+        <div className="connection-status">
+          <span className={`status-indicator ${isWebSocketConnected ? 'connected' : 'disconnected'}`}></span>
+          <span className="status-text">{isWebSocketConnected ? 'Live' : 'Offline'}</span>
         </div>
       </div>
       
       {error && <div className="error-message">{error}</div>}
       
-      <div className="chart-container">
-        {isLoading ? (
-          <div className="loading">Loading price data...</div>
+      <div className="dashboard-content">
+        <div className="chart-container">
+          <h2>Price Chart: {currentSymbol}</h2>
+          {isDataLoading ? (
+            <div className="loading-indicator">Loading chart data...</div>
+          ) : (
+            <PriceChart
+              priceData={priceData}
+              signalsData={signalsData}
+              symbol={currentSymbol}
+              timeframe={timeframe}
+            />
+          )}
+        </div>
+        
+        <div className="performance-container">
+          <h2>Performance Metrics</h2>
+          {currentSymbolRanking ? (
+            <div className="performance-metrics">
+              <div className="metric">
+                <span className="metric-label">Rank:</span>
+                <span className="metric-value">{currentSymbolRanking.rank}</span>
+              </div>
+              <div className="metric">
+                <span className="metric-label">Performance:</span>
+                <span className={`metric-value ${currentSymbolRanking.performance >= 0 ? 'positive' : 'negative'}`}>
+                  {currentSymbolRanking.performance.toFixed(2)}%
+                </span>
+              </div>
+              <div className="metric">
+                <span className="metric-label">Current Price:</span>
+                <span className="metric-value">${currentSymbolRanking.end_price.toFixed(2)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="loading-indicator">Loading performance data...</div>
+          )}
+        </div>
+      </div>
+      
+      <div className="trading-signals">
+        <h2>Trading Signals</h2>
+        {signalsData && signalsData.length > 0 ? (
+          <div className="signals-table-container">
+            <table className="signals-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Price</th>
+                  <th>Signal</th>
+                  <th>Indicator Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {signalsData.slice(-10).map((signal, index) => {
+                  // Determine signal type
+                  let signalType = 'None';
+                  let signalClass = '';
+                  
+                  if (signal.buy_signal) {
+                    signalType = 'Buy';
+                    signalClass = 'buy-signal';
+                  } else if (signal.sell_signal) {
+                    signalType = 'Sell';
+                    signalClass = 'sell-signal';
+                  } else if (signal.potential_buy) {
+                    signalType = 'Potential Buy';
+                    signalClass = 'potential-buy';
+                  } else if (signal.potential_sell) {
+                    signalType = 'Potential Sell';
+                    signalClass = 'potential-sell';
+                  }
+                  
+                  return (
+                    <tr key={index} className={signalClass}>
+                      <td>{new Date(signal.timestamp || signal.date).toLocaleString()}</td>
+                      <td>${signal.price.toFixed(2)}</td>
+                      <td className={signalClass}>{signalType}</td>
+                      <td>{signal.daily_composite.toFixed(4)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          <PriceChart
-            priceData={priceData}
-            signals={signalsData}
-            symbol={selectedSymbol}
-          />
+          <div className="no-data">No signal data available</div>
         )}
       </div>
       
-      {backtestResults && (
-        <div className="backtest-section">
-          <BacktestResults results={backtestResults} />
-        </div>
-      )}
+      <div className="ranking-table">
+        <h2>Performance Ranking</h2>
+        {performanceRanking && performanceRanking.length > 0 ? (
+          <div className="ranking-table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Symbol</th>
+                  <th>Performance</th>
+                  <th>Current Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {performanceRanking
+                  .sort((a, b) => a.rank - b.rank)
+                  .slice(0, 10)
+                  .map((item) => (
+                    <tr 
+                      key={item.symbol} 
+                      className={item.symbol === currentSymbol ? 'current-symbol' : ''}
+                      onClick={() => onSymbolChange(item.symbol)}
+                    >
+                      <td>{item.rank}</td>
+                      <td>{item.symbol}</td>
+                      <td className={item.performance >= 0 ? 'positive' : 'negative'}>
+                        {item.performance.toFixed(2)}%
+                      </td>
+                      <td>${item.end_price.toFixed(2)}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="loading-indicator">Loading ranking data...</div>
+        )}
+      </div>
     </div>
   );
-};
+}
 
 export default Dashboard;

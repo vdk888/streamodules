@@ -2,278 +2,159 @@
 Cryptocurrency-specific configuration and symbol definitions
 """
 
-# Default parameters
-DEFAULT_SYMBOL = 'BTC/USD'
-DEFAULT_TIMEFRAME = '1h'
+# Default settings
+DEFAULT_SYMBOL = "BTC/USD"
+DEFAULT_TIMEFRAME = "1h"
 DEFAULT_LOOKBACK_DAYS = 15
+DEFAULT_BACKTEST_DAYS = 30
 
-# Trading costs for crypto
-TRADING_COSTS = {
-    'trading_fee': 0.001,  # 0.1% per trade
-    'spread': 0.001,       # 0.1% spread (bid-ask)
-    'slippage': 0.001      # 0.1% slippage
+# Available crypto symbols
+AVAILABLE_SYMBOLS = [
+    "BTC/USD",    # Bitcoin
+    "ETH/USD",    # Ethereum
+    "SOL/USD",    # Solana
+    "AVAX/USD",   # Avalanche
+    "DOT/USD",    # Polkadot
+    "LINK/USD",   # Chainlink
+    "DOGE/USD",   # Dogecoin
+    "AAVE/USD",   # Aave
+    "UNI/USD",    # Uniswap
+    "LTC/USD",    # Litecoin
+    "XRP/USD",    # Ripple
+    "ADA/USD",    # Cardano
+    "MATIC/USD",  # Polygon
+    "ATOM/USD",   # Cosmos
+    "ALGO/USD",   # Algorand
+    "XLM/USD",    # Stellar
+    "FIL/USD",    # Filecoin
+    "NEAR/USD",   # NEAR Protocol
+    "SAND/USD",   # The Sandbox
+    "MANA/USD",   # Decentraland
+]
+
+# Exchange profiles
+EXCHANGE_PROFILES = {
+    "coinbase": {
+        "name": "Coinbase",
+        "url": "https://api.coinbase.com",
+        "fee_rate": 0.5,  # percentage
+        "trading_hours": {
+            "always_open": True
+        }
+    },
+    "binance": {
+        "name": "Binance",
+        "url": "https://api.binance.com",
+        "fee_rate": 0.1,  # percentage
+        "trading_hours": {
+            "always_open": True
+        }
+    }
 }
 
-# Available trading symbols with metadata
-TRADING_SYMBOLS = {
-    'BTC/USD': {
-        'name': 'Bitcoin',
-        'description': 'Bitcoin to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.001,  # Minimum order size in BTC
-        'price_precision': 2,     # Price precision in decimal places
-        'amount_precision': 6,    # Amount precision in decimal places
-        'exchange': 'Coinbase'
+# Map symbols to specific exchanges (if needed)
+SYMBOL_EXCHANGE_MAP = {}  # Default to first exchange
+
+# Time intervals for data retrieval
+TIME_INTERVALS = {
+    "1m": {
+        "name": "1 Minute",
+        "seconds": 60,
+        "max_lookback_days": 1
     },
-    'ETH/USD': {
-        'name': 'Ethereum',
-        'description': 'Ethereum to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.01,
-        'price_precision': 2,
-        'amount_precision': 6,
-        'exchange': 'Coinbase'
+    "5m": {
+        "name": "5 Minutes",
+        "seconds": 300,
+        "max_lookback_days": 5
     },
-    'SOL/USD': {
-        'name': 'Solana',
-        'description': 'Solana to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.1,
-        'price_precision': 2,
-        'amount_precision': 6,
-        'exchange': 'Coinbase'
+    "15m": {
+        "name": "15 Minutes",
+        "seconds": 900,
+        "max_lookback_days": 7
     },
-    'AVAX/USD': {
-        'name': 'Avalanche',
-        'description': 'Avalanche to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.1,
-        'price_precision': 2,
-        'amount_precision': 6,
-        'exchange': 'Coinbase'
+    "30m": {
+        "name": "30 Minutes",
+        "seconds": 1800,
+        "max_lookback_days": 14
     },
-    'DOT/USD': {
-        'name': 'Polkadot',
-        'description': 'Polkadot to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.1,
-        'price_precision': 2,
-        'amount_precision': 6,
-        'exchange': 'Coinbase'
+    "1h": {
+        "name": "1 Hour",
+        "seconds": 3600,
+        "max_lookback_days": 30
     },
-    'LINK/USD': {
-        'name': 'Chainlink',
-        'description': 'Chainlink to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.1,
-        'price_precision': 2,
-        'amount_precision': 6,
-        'exchange': 'Coinbase'
+    "4h": {
+        "name": "4 Hours",
+        "seconds": 14400,
+        "max_lookback_days": 60
     },
-    'DOGE/USD': {
-        'name': 'Dogecoin',
-        'description': 'Dogecoin to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 10,
-        'price_precision': 6,
-        'amount_precision': 2,
-        'exchange': 'Coinbase'
+    "1d": {
+        "name": "1 Day",
+        "seconds": 86400,
+        "max_lookback_days": 365
     },
-    'AAVE/USD': {
-        'name': 'Aave',
-        'description': 'Aave to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.01,
-        'price_precision': 2,
-        'amount_precision': 6,
-        'exchange': 'Coinbase'
+    "1w": {
+        "name": "1 Week",
+        "seconds": 604800,
+        "max_lookback_days": 730
+    }
+}
+
+# Strategy parameters
+STRATEGY_PARAMS = {
+    "default": {
+        "rsi_period": 14,
+        "macd_fast": 12,
+        "macd_slow": 26,
+        "macd_signal": 9,
+        "stoch_k": 14,
+        "stoch_d": 3,
+        "hurst_lags": [10, 20, 40, 80],
+        "volatility_window": 20,
+        "rsi_weight": 0.3,
+        "macd_weight": 0.3,
+        "stoch_weight": 0.2,
+        "fractal_weight": 0.2
     },
-    'UNI/USD': {
-        'name': 'Uniswap',
-        'description': 'Uniswap to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.1,
-        'price_precision': 2,
-        'amount_precision': 6,
-        'exchange': 'Coinbase'
+    "aggressive": {
+        "rsi_period": 10,
+        "macd_fast": 8,
+        "macd_slow": 20,
+        "macd_signal": 7,
+        "stoch_k": 10,
+        "stoch_d": 3,
+        "hurst_lags": [5, 10, 20, 40],
+        "volatility_window": 15,
+        "rsi_weight": 0.25,
+        "macd_weight": 0.35,
+        "stoch_weight": 0.15,
+        "fractal_weight": 0.25
     },
-    'LTC/USD': {
-        'name': 'Litecoin',
-        'description': 'Litecoin to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.01,
-        'price_precision': 2,
-        'amount_precision': 6,
-        'exchange': 'Coinbase'
+    "conservative": {
+        "rsi_period": 21,
+        "macd_fast": 16,
+        "macd_slow": 32,
+        "macd_signal": 11,
+        "stoch_k": 21,
+        "stoch_d": 7,
+        "hurst_lags": [20, 40, 80, 160],
+        "volatility_window": 30,
+        "rsi_weight": 0.35,
+        "macd_weight": 0.25,
+        "stoch_weight": 0.25,
+        "fractal_weight": 0.15
+    }
+}
+
+# Portfolio settings
+PORTFOLIO_SETTINGS = {
+    "max_assets": 10,        # Maximum number of assets to hold at once
+    "position_sizing": {
+        "method": "ranking",  # Can be 'equal', 'ranking', 'volatility'
+        "min_position": 0.02, # Minimum position size (as fraction of portfolio)
+        "max_position": 0.2   # Maximum position size (as fraction of portfolio)
     },
-    'SHIB/USD': {
-        'name': 'Shiba Inu',
-        'description': 'Shiba Inu to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 100000,
-        'price_precision': 8,
-        'amount_precision': 0,
-        'exchange': 'Coinbase'
-    },
-    'BAT/USD': {
-        'name': 'Basic Attention Token',
-        'description': 'Basic Attention Token to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 1,
-        'price_precision': 4,
-        'amount_precision': 2,
-        'exchange': 'Coinbase'
-    },
-    'BCH/USD': {
-        'name': 'Bitcoin Cash',
-        'description': 'Bitcoin Cash to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.01,
-        'price_precision': 2,
-        'amount_precision': 6,
-        'exchange': 'Coinbase'
-    },
-    'CRV/USD': {
-        'name': 'Curve DAO Token',
-        'description': 'Curve DAO Token to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 1,
-        'price_precision': 4,
-        'amount_precision': 2,
-        'exchange': 'Coinbase'
-    },
-    'GRT/USD': {
-        'name': 'The Graph',
-        'description': 'The Graph to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 1,
-        'price_precision': 4,
-        'amount_precision': 2,
-        'exchange': 'Coinbase'
-    },
-    'MKR/USD': {
-        'name': 'Maker',
-        'description': 'Maker to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.001,
-        'price_precision': 2,
-        'amount_precision': 6,
-        'exchange': 'Coinbase'
-    },
-    'SUSHI/USD': {
-        'name': 'SushiSwap',
-        'description': 'SushiSwap to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.1,
-        'price_precision': 4,
-        'amount_precision': 2,
-        'exchange': 'Coinbase'
-    },
-    'XTZ/USD': {
-        'name': 'Tezos',
-        'description': 'Tezos to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.1,
-        'price_precision': 4,
-        'amount_precision': 2,
-        'exchange': 'Coinbase'
-    },
-    'YFI/USD': {
-        'name': 'yearn.finance',
-        'description': 'yearn.finance to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 0.0001,
-        'price_precision': 2,
-        'amount_precision': 6,
-        'exchange': 'Coinbase'
-    },
-    'XRP/USD': {
-        'name': 'Ripple',
-        'description': 'Ripple to US Dollar',
-        'market_hours': {
-            'start': '00:00',
-            'end': '23:59',
-            'timezone': 'UTC'
-        },
-        'min_order_size': 1,
-        'price_precision': 4,
-        'amount_precision': 2,
-        'exchange': 'Coinbase'
+    "rebalancing": {
+        "frequency": "daily",  # How often to rebalance portfolio
+        "threshold": 0.05      # Minimum deviation to trigger rebalance
     }
 }
