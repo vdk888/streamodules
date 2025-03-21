@@ -14,12 +14,16 @@ function App() {
 
   // Base URL for API
   const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  
+  console.log('API Base URL:', apiBaseUrl);
 
   useEffect(() => {
     const loadSymbols = async () => {
       try {
         setIsLoading(true);
+        console.log('Fetching symbols from:', `${apiBaseUrl}/api/crypto/symbols`);
         const data = await fetchSymbols(apiBaseUrl);
+        console.log('Received symbols data:', data);
         
         if (data.success && data.symbols) {
           setSymbols(data.symbols);
@@ -28,6 +32,7 @@ function App() {
             setCurrentSymbol(data.symbols[0].symbol);
           }
         } else {
+          console.error('Data returned without success or symbols property:', data);
           setError('Failed to load symbols');
         }
       } catch (err) {

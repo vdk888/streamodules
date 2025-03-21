@@ -9,11 +9,19 @@
  */
 export const fetchSymbols = async (baseUrl) => {
   try {
+    console.log(`Fetching symbols from: ${baseUrl}/api/crypto/symbols`);
     const response = await fetch(`${baseUrl}/api/crypto/symbols`);
+    console.log('Response status:', response.status);
+    
     if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+      const errorText = await response.text();
+      console.error('Error response text:', errorText);
+      throw new Error(`HTTP error! Status: ${response.status}, Text: ${errorText}`);
     }
-    return await response.json();
+    
+    const data = await response.json();
+    console.log('Parsed response data:', data);
+    return data;
   } catch (error) {
     console.error('Error fetching symbols:', error);
     throw error;
