@@ -49,6 +49,9 @@ selected_symbol = st.sidebar.selectbox(
 st.title(f"{selected_symbol} Price Monitor with Technical Indicators")
 st.markdown("Real-time price data with signal alerts based on technical indicators")
 
+# Create tabs for different sections
+tab1, tab2, tab3 = st.tabs(["Price Monitor", "Single Asset Backtest", "Portfolio Backtest"])
+
 # Timeframe selection
 timeframe = st.sidebar.selectbox(
     "Timeframe",
@@ -87,7 +90,6 @@ with st.sidebar.expander("Portfolio Simulation", expanded=True):
 
 # Backtest settings
 with st.sidebar.expander("Backtest Settings", expanded=False):
-    enable_backtest = st.checkbox("Enable Backtest", value=False)
     backtest_days = st.slider(
         "Backtest Period (days)",
         min_value=5,
@@ -95,21 +97,6 @@ with st.sidebar.expander("Backtest Settings", expanded=False):
         value=30,
         step=1
     )
-    
-    if st.button("Run Backtest"):
-        st.session_state['run_backtest'] = True
-    
-    # Multi-coin portfolio backtest
-    st.markdown("### Portfolio Backtest")
-    portfolio_symbols = st.multiselect(
-        "Select symbols for portfolio backtest",
-        options=symbol_options,
-        default=[symbol_options[0]]  # Default to first symbol
-    )
-    
-    if st.button("Run Portfolio Backtest"):
-        st.session_state['run_portfolio_backtest'] = True
-        st.session_state['portfolio_symbols'] = portfolio_symbols
 
 
 # Best parameters management
@@ -617,11 +604,47 @@ def get_historical_ranking(symbol, timestamp):
         print(f"Error getting historical ranking data: {e}")
         return None, None
 
-# Create placeholders for charts
-price_chart_placeholder = st.empty()
-indicators_placeholder = st.empty()
-signals_placeholder = st.empty()
-portfolio_placeholder = st.empty()
+# Create placeholders for charts in each tab
+with tab1:
+    price_chart_placeholder = st.empty()
+    indicators_placeholder = st.empty()
+    signals_placeholder = st.empty()
+    portfolio_placeholder = st.empty()
+    
+# Create placeholders for single asset backtest
+with tab2:
+    st.subheader("Single Asset Backtest")
+    backtest_col1, backtest_col2 = st.columns([1, 1])
+    with backtest_col1:
+        if st.button("Run Backtest"):
+            st.session_state['run_backtest'] = True
+    with backtest_col2:
+        export_backtest = st.checkbox("Export Results", value=False)
+    
+    backtest_results_placeholder = st.empty()
+    backtest_plot_placeholder = st.empty()
+    backtest_metrics_placeholder = st.empty()
+
+# Create placeholders for portfolio backtest
+with tab3:
+    st.subheader("Portfolio Backtest")
+    portfolio_symbols = st.multiselect(
+        "Select symbols for portfolio backtest",
+        options=symbol_options,
+        default=[symbol_options[0]]  # Default to first symbol
+    )
+    
+    portfolio_col1, portfolio_col2 = st.columns([1, 1])
+    with portfolio_col1:
+        if st.button("Run Portfolio Backtest"):
+            st.session_state['run_portfolio_backtest'] = True
+    with portfolio_col2:
+        export_portfolio_backtest = st.checkbox("Export Portfolio Results", value=False)
+    
+    portfolio_backtest_results_placeholder = st.empty()
+    portfolio_plot_placeholder = st.empty()
+    portfolio_metrics_placeholder = st.empty()
+    portfolio_comparison_placeholder = st.empty()
 
 # Function to update the charts
 def update_charts():
@@ -631,9 +654,28 @@ def update_charts():
         params = load_best_params(selected_symbol)
     else:
         params = get_default_params()
-
-    # Fetch and process the data
+        
+    # Fetch and process the data for all tabs
     df, error = fetch_and_process_data(selected_symbol, timeframe, lookback_days)
+    
+    if error:
+        st.error(f"Error fetching data: {error}")
+        return
+    
+    if df is None or df.empty:
+        st.warning("No data available. Please try a different timeframe or lookback period.")
+        return
+    
+    # Generate signals and indicators
+    signals_df, daily_data, weekly_data = generate_signals_with_indicators(df)
+    
+    if signals_df is None or signals_df.empty:
+        st.warning("Could not generate signals. Please try a different timeframe or lookback period.")
+        return
+        
+    # Update content in the first tab (Price Monitor)
+    with tab1:
+        df, error = fetch_and_process_data(selected_symbol, timeframe, lookback_days)
 
     if error:
         st.error(f"Error fetching data: {error}")
