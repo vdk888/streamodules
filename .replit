@@ -1,4 +1,4 @@
-modules = ["python-3.11", "nodejs-20"]
+modules = ["python-3.11"]
 
 [nix]
 channel = "stable-24_05"
@@ -17,14 +17,10 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "FastAPI Server"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "React Frontend"
+args = "Streamlit Server"
 
 [[workflows.workflow]]
-name = "FastAPI Server"
+name = "Streamlit Server"
 author = "agent"
 
 [workflows.workflow.metadata]
@@ -35,31 +31,12 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python server.py"
+args = "streamlit run app.py --server.port 5000"
 waitForPort = 5000
-
-[[workflows.workflow]]
-name = "React Frontend"
-author = "agent"
-
-[workflows.workflow.metadata]
-agentRequireRestartOnSave = false
-
-[[workflows.workflow.tasks]]
-task = "packager.installForAll"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd trading_platform/frontend && npm start"
-waitForPort = 5001
 
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 5001
-externalPort = 3000
 
 [objectStorage]
 defaultBucketID = "replit-objstore-2927bac7-9a77-4731-9fd7-61c199e7357c"

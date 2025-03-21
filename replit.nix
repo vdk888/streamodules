@@ -1,6 +1,5 @@
 {pkgs}: {
   deps = [
-    pkgs.libxcrypt
     pkgs.tk
     pkgs.tcl
     pkgs.qhull
