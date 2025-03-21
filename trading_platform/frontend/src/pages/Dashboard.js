@@ -1,131 +1,99 @@
-import React, { useState, useEffect } from 'react';
-import SymbolSelector from '../components/SymbolSelector';
+import React, { useState, useEffect, useRef } from 'react';
+import { fetchSymbolData, fetchRanking, setupWebSocket } from '../services/api';
 import PriceChart from '../components/PriceChart';
-import BacktestResults from '../components/BacktestResults';
+import SymbolSelector from '../components/SymbolSelector';
 
 function Dashboard({ symbols, currentSymbol, onSymbolChange, apiBaseUrl, isLoading }) {
-  // State variables
   const [timeframe, setTimeframe] = useState('1h');
   const [lookbackDays, setLookbackDays] = useState(15);
   const [priceData, setPriceData] = useState([]);
   const [signalsData, setSignalsData] = useState([]);
-  const [isDataLoading, setIsDataLoading] = useState(false);
+  const [rankingData, setRankingData] = useState([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [performanceRanking, setPerformanceRanking] = useState([]);
-  const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
-  const [webSocket, setWebSocket] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  
+  const webSocketRef = useRef(null);
 
-  // Fetch cryptocurrency data
+  // Load initial data
   useEffect(() => {
-    const fetchData = async () => {
-      if (!currentSymbol) return;
+    if (!currentSymbol || !apiBaseUrl) return;
 
-      setIsDataLoading(true);
+    const loadData = async () => {
       try {
-        const response = await fetch(
-          `${apiBaseUrl}/crypto/data/${encodeURIComponent(currentSymbol)}?timeframe=${timeframe}&lookback_days=${lookbackDays}`
-        );
+        setDataLoading(true);
+        setError(null);
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-
-        const data = await response.json();
+        // Fetch symbol data
+        const data = await fetchSymbolData(apiBaseUrl, currentSymbol, timeframe, lookbackDays);
+        
         if (data.success) {
           setPriceData(data.price_data || []);
           setSignalsData(data.signals_data || []);
+          setLastUpdated(new Date());
         } else {
-          throw new Error(data.error || 'Failed to fetch cryptocurrency data');
+          setError(data.error || 'Failed to load price data');
+        }
+
+        // Fetch ranking data
+        const rankingResponse = await fetchRanking(apiBaseUrl, lookbackDays);
+        
+        if (rankingResponse.success) {
+          setRankingData(rankingResponse.ranking || []);
         }
       } catch (err) {
-        setError(err.message);
-        console.error('Error fetching cryptocurrency data:', err);
+        console.error('Error loading dashboard data:', err);
+        setError('Failed to load data. Please try again later.');
       } finally {
-        setIsDataLoading(false);
+        setDataLoading(false);
       }
     };
 
-    fetchData();
-  }, [currentSymbol, timeframe, lookbackDays, apiBaseUrl]);
+    loadData();
+  }, [apiBaseUrl, currentSymbol, timeframe, lookbackDays]);
 
-  // Fetch performance ranking
+  // Setup WebSocket for real-time updates
   useEffect(() => {
-    const fetchRanking = async () => {
-      try {
-        const response = await fetch(`${apiBaseUrl}/crypto/ranking?lookback_days=${lookbackDays}`);
+    if (!currentSymbol || !apiBaseUrl) return;
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (data.success && data.ranking) {
-          setPerformanceRanking(data.ranking);
-        } else {
-          throw new Error(data.error || 'Failed to fetch performance ranking');
-        }
-      } catch (err) {
-        console.error('Error fetching performance ranking:', err);
-      }
-    };
-
-    fetchRanking();
-  }, [lookbackDays, apiBaseUrl]);
-
-  // Setup WebSocket connection
-  useEffect(() => {
-    if (!currentSymbol) return;
-
-    // Close existing connection if any
-    if (webSocket) {
-      webSocket.close();
+    // Disconnect previous WebSocket
+    if (webSocketRef.current) {
+      webSocketRef.current.close();
     }
 
-    // WebSocket Host - replace with your actual domain in production
-    const wsHost = window.location.hostname === 'localhost' 
-      ? 'ws://localhost:5000' 
-      : `wss://${window.location.host}`;
-    
-    const ws = new WebSocket(`${wsHost}/ws/crypto/${encodeURIComponent(currentSymbol)}`);
-
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-      setIsWebSocketConnected(true);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
+    // Setup new WebSocket
+    const ws = setupWebSocket(
+      apiBaseUrl,
+      currentSymbol,
+      (data) => {
         if (data.success) {
           setPriceData(data.price_data || []);
           setSignalsData(data.signals_data || []);
-        } else {
+          setLastUpdated(new Date());
+        } else if (data.error) {
           console.error('WebSocket error:', data.error);
         }
-      } catch (err) {
-        console.error('Error processing WebSocket message:', err);
+      },
+      (error) => {
+        console.error('WebSocket error:', error);
+        setIsConnected(false);
+      },
+      () => {
+        setIsConnected(false);
       }
-    };
+    );
 
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      setIsWebSocketConnected(false);
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setIsWebSocketConnected(false);
-    };
-
-    setWebSocket(ws);
+    webSocketRef.current = ws;
+    setIsConnected(true);
 
     // Cleanup on unmount
     return () => {
-      if (ws) {
-        ws.close();
+      if (webSocketRef.current) {
+        webSocketRef.current.close();
       }
     };
-  }, [currentSymbol]);
+  }, [apiBaseUrl, currentSymbol]);
 
   // Handle timeframe change
   const handleTimeframeChange = (newTimeframe) => {
@@ -133,31 +101,73 @@ function Dashboard({ symbols, currentSymbol, onSymbolChange, apiBaseUrl, isLoadi
   };
 
   // Handle lookback days change
-  const handleLookbackDaysChange = (newLookbackDays) => {
-    setLookbackDays(newLookbackDays);
+  const handleLookbackDaysChange = (days) => {
+    setLookbackDays(days);
   };
 
-  // Find current symbol ranking
-  const currentSymbolRanking = performanceRanking.find(
-    (item) => item.symbol === currentSymbol
-  );
+  // Get current symbol ranking
+  const getCurrentRanking = () => {
+    if (!rankingData.length || !currentSymbol) return null;
+    
+    const symbolRanking = rankingData.find(item => item.symbol === currentSymbol);
+    return symbolRanking || null;
+  };
+
+  // Format price with commas for thousands
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('en-US', { 
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(price);
+  };
+
+  // Calculate price change
+  const calculatePriceChange = () => {
+    if (!priceData || priceData.length < 2) return { value: 0, percentage: 0 };
+    
+    const latest = priceData[priceData.length - 1];
+    const previous = priceData[priceData.length - 2];
+    
+    if (!latest || !previous) return { value: 0, percentage: 0 };
+    
+    const change = latest.close - previous.close;
+    const percentage = (change / previous.close) * 100;
+    
+    return {
+      value: change,
+      percentage
+    };
+  };
+
+  // Get latest signals
+  const getLatestSignals = () => {
+    if (!signalsData || !signalsData.length) return [];
+    
+    // Get last 10 signals or less if fewer are available
+    return signalsData.slice(-10).reverse();
+  };
+
+  const currentRanking = getCurrentRanking();
+  const priceChange = calculatePriceChange();
+  const latestSignals = getLatestSignals();
+  const latestPrice = priceData.length > 0 ? priceData[priceData.length - 1] : null;
 
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <SymbolSelector
-          symbols={symbols}
-          currentSymbol={currentSymbol}
+        <SymbolSelector 
+          symbols={symbols} 
+          currentSymbol={currentSymbol} 
           onSymbolChange={onSymbolChange}
           isLoading={isLoading}
         />
         
         <div className="timeframe-selector">
-          <label htmlFor="timeframe">Timeframe:</label>
-          <select
-            id="timeframe"
+          <label>Timeframe:</label>
+          <select 
             value={timeframe}
             onChange={(e) => handleTimeframeChange(e.target.value)}
+            disabled={dataLoading}
           >
             <option value="1h">1 Hour</option>
             <option value="4h">4 Hours</option>
@@ -166,21 +176,22 @@ function Dashboard({ symbols, currentSymbol, onSymbolChange, apiBaseUrl, isLoadi
         </div>
         
         <div className="lookback-selector">
-          <label htmlFor="lookback">Lookback Days:</label>
-          <select
-            id="lookback"
+          <label>Lookback:</label>
+          <select 
             value={lookbackDays}
             onChange={(e) => handleLookbackDaysChange(parseInt(e.target.value))}
+            disabled={dataLoading}
           >
-            <option value="7">7 Days</option>
+            <option value="5">5 Days</option>
+            <option value="10">10 Days</option>
             <option value="15">15 Days</option>
             <option value="30">30 Days</option>
           </select>
         </div>
         
         <div className="connection-status">
-          <span className={`status-indicator ${isWebSocketConnected ? 'connected' : 'disconnected'}`}></span>
-          <span className="status-text">{isWebSocketConnected ? 'Live' : 'Offline'}</span>
+          <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}></div>
+          <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
         </div>
       </div>
       
@@ -188,131 +199,175 @@ function Dashboard({ symbols, currentSymbol, onSymbolChange, apiBaseUrl, isLoadi
       
       <div className="dashboard-content">
         <div className="chart-container">
-          <h2>Price Chart: {currentSymbol}</h2>
-          {isDataLoading ? (
-            <div className="loading-indicator">Loading chart data...</div>
+          {dataLoading ? (
+            <div className="loading-indicator">
+              <div className="loading-indicator-small"></div>
+              <span>Loading data...</span>
+            </div>
           ) : (
-            <PriceChart
-              priceData={priceData}
-              signalsData={signalsData}
-              symbol={currentSymbol}
-              timeframe={timeframe}
-            />
+            <>
+              <PriceChart 
+                priceData={priceData} 
+                signalsData={signalsData}
+                symbol={currentSymbol}
+                timeframe={timeframe}
+              />
+              
+              <div className="signals-table-container">
+                <h3>Recent Signals</h3>
+                {latestSignals.length > 0 ? (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Price</th>
+                        <th>Signal</th>
+                        <th>Indicator</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {latestSignals.map((signal, index) => {
+                        let signalType = "None";
+                        let rowClass = "";
+                        
+                        if (signal.buy_signal) {
+                          signalType = "BUY";
+                          rowClass = "buy-signal";
+                        } else if (signal.sell_signal) {
+                          signalType = "SELL";
+                          rowClass = "sell-signal";
+                        } else if (signal.potential_buy) {
+                          signalType = "Potential Buy";
+                          rowClass = "potential-buy";
+                        } else if (signal.potential_sell) {
+                          signalType = "Potential Sell";
+                          rowClass = "potential-sell";
+                        }
+                        
+                        const timestamp = new Date(signal.timestamp);
+                        
+                        return (
+                          <tr key={index} className={rowClass}>
+                            <td>{timestamp.toLocaleString()}</td>
+                            <td>${formatPrice(signal.price)}</td>
+                            <td>{signalType}</td>
+                            <td>{signal.daily_composite.toFixed(4)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p>No recent signals available.</p>
+                )}
+              </div>
+            </>
           )}
         </div>
         
         <div className="performance-container">
-          <h2>Performance Metrics</h2>
-          {currentSymbolRanking ? (
-            <div className="performance-metrics">
-              <div className="metric">
-                <span className="metric-label">Rank:</span>
-                <span className="metric-value">{currentSymbolRanking.rank}</span>
+          <h3>Market Stats</h3>
+          
+          {latestPrice ? (
+            <>
+              <div className="crypto-symbol">{currentSymbol}</div>
+              <div className="crypto-price">${formatPrice(latestPrice.close)}</div>
+              
+              <div className={priceChange.value >= 0 ? 'positive' : 'negative'}>
+                {priceChange.value >= 0 ? '▲' : '▼'} 
+                ${Math.abs(priceChange.value).toFixed(2)} 
+                ({Math.abs(priceChange.percentage).toFixed(2)}%)
               </div>
-              <div className="metric">
-                <span className="metric-label">Performance:</span>
-                <span className={`metric-value ${currentSymbolRanking.performance >= 0 ? 'positive' : 'negative'}`}>
-                  {currentSymbolRanking.performance.toFixed(2)}%
-                </span>
+              
+              <div className="performance-metrics">
+                <div className="metric">
+                  <div className="metric-label">High</div>
+                  <div className="metric-value">
+                    ${formatPrice(Math.max(...priceData.map(d => d.high)))}
+                  </div>
+                </div>
+                
+                <div className="metric">
+                  <div className="metric-label">Low</div>
+                  <div className="metric-value">
+                    ${formatPrice(Math.min(...priceData.map(d => d.low)))}
+                  </div>
+                </div>
+                
+                <div className="metric">
+                  <div className="metric-label">24h Volume</div>
+                  <div className="metric-value">
+                    ${formatPrice(priceData.slice(-24).reduce((sum, d) => sum + d.volume, 0))}
+                  </div>
+                </div>
+                
+                <div className="metric">
+                  <div className="metric-label">Updated</div>
+                  <div className="metric-value">
+                    {lastUpdated ? lastUpdated.toLocaleTimeString() : 'N/A'}
+                  </div>
+                </div>
               </div>
-              <div className="metric">
-                <span className="metric-label">Current Price:</span>
-                <span className="metric-value">${currentSymbolRanking.end_price.toFixed(2)}</span>
+              
+              {currentRanking && (
+                <>
+                  <h3>Performance Ranking</h3>
+                  <div style={{ marginBottom: '1rem' }}>
+                    <div>Rank: {currentRanking.rank} of {rankingData.length}</div>
+                    <div>Performance: {currentRanking.performance.toFixed(2)}%</div>
+                    <div className="metric">
+                      <div className="metric-label">Position Sizing</div>
+                      <div className="metric-value">
+                        Buy: {(0.5 * Math.exp(-2.5 * (currentRanking.rank / rankingData.length)) + 0.05).toFixed(2) * 100}%
+                        <br />
+                        Sell: {(0.1 + 0.9 * (currentRanking.rank / rankingData.length)).toFixed(2) * 100}%
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+              
+              <h3>Top Performers</h3>
+              <div className="ranking-table-container">
+                {rankingData.length > 0 ? (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Rank</th>
+                        <th>Symbol</th>
+                        <th>Performance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rankingData
+                        .sort((a, b) => a.rank - b.rank)
+                        .slice(0, 5)
+                        .map((item, index) => (
+                          <tr 
+                            key={index}
+                            className={item.symbol === currentSymbol ? 'current-symbol' : ''}
+                          >
+                            <td>{item.rank}</td>
+                            <td>{item.symbol}</td>
+                            <td className={item.performance >= 0 ? 'positive' : 'negative'}>
+                              {item.performance.toFixed(2)}%
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p>Ranking data not available.</p>
+                )}
               </div>
-            </div>
+            </>
           ) : (
-            <div className="loading-indicator">Loading performance data...</div>
+            <div className="loading-indicator">
+              <div className="loading-indicator-small"></div>
+              <span>Loading market data...</span>
+            </div>
           )}
         </div>
-      </div>
-      
-      <div className="trading-signals">
-        <h2>Trading Signals</h2>
-        {signalsData && signalsData.length > 0 ? (
-          <div className="signals-table-container">
-            <table className="signals-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Price</th>
-                  <th>Signal</th>
-                  <th>Indicator Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {signalsData.slice(-10).map((signal, index) => {
-                  // Determine signal type
-                  let signalType = 'None';
-                  let signalClass = '';
-                  
-                  if (signal.buy_signal) {
-                    signalType = 'Buy';
-                    signalClass = 'buy-signal';
-                  } else if (signal.sell_signal) {
-                    signalType = 'Sell';
-                    signalClass = 'sell-signal';
-                  } else if (signal.potential_buy) {
-                    signalType = 'Potential Buy';
-                    signalClass = 'potential-buy';
-                  } else if (signal.potential_sell) {
-                    signalType = 'Potential Sell';
-                    signalClass = 'potential-sell';
-                  }
-                  
-                  return (
-                    <tr key={index} className={signalClass}>
-                      <td>{new Date(signal.timestamp || signal.date).toLocaleString()}</td>
-                      <td>${signal.price.toFixed(2)}</td>
-                      <td className={signalClass}>{signalType}</td>
-                      <td>{signal.daily_composite.toFixed(4)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="no-data">No signal data available</div>
-        )}
-      </div>
-      
-      <div className="ranking-table">
-        <h2>Performance Ranking</h2>
-        {performanceRanking && performanceRanking.length > 0 ? (
-          <div className="ranking-table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Symbol</th>
-                  <th>Performance</th>
-                  <th>Current Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {performanceRanking
-                  .sort((a, b) => a.rank - b.rank)
-                  .slice(0, 10)
-                  .map((item) => (
-                    <tr 
-                      key={item.symbol} 
-                      className={item.symbol === currentSymbol ? 'current-symbol' : ''}
-                      onClick={() => onSymbolChange(item.symbol)}
-                    >
-                      <td>{item.rank}</td>
-                      <td>{item.symbol}</td>
-                      <td className={item.performance >= 0 ? 'positive' : 'negative'}>
-                        {item.performance.toFixed(2)}%
-                      </td>
-                      <td>${item.end_price.toFixed(2)}</td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="loading-indicator">Loading ranking data...</div>
-        )}
       </div>
     </div>
   );

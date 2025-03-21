@@ -1,30 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import Dashboard from './pages/Dashboard';
 import './styles/App.css';
 
-// Import components
-import Dashboard from './pages/Dashboard';
-
-// API URLs
-const API_BASE_URL = 'http://localhost:5000/api';
+// API service
+import { fetchSymbols } from './services/api';
 
 function App() {
-  // State for app-wide data
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [symbols, setSymbols] = useState([]);
   const [currentSymbol, setCurrentSymbol] = useState('BTC/USD');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Fetch available symbols when app loads
+  // Base URL for API
+  const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
   useEffect(() => {
-    const fetchSymbols = async () => {
-      setIsLoading(true);
+    const loadSymbols = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/crypto/symbols`);
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        const data = await response.json();
+        setIsLoading(true);
+        const data = await fetchSymbols(apiBaseUrl);
+        
         if (data.success && data.symbols) {
           setSymbols(data.symbols);
           // Set default symbol if available
@@ -32,22 +28,21 @@ function App() {
             setCurrentSymbol(data.symbols[0].symbol);
           }
         } else {
-          throw new Error('Failed to fetch symbols');
+          setError('Failed to load symbols');
         }
-      } catch (error) {
-        setError(error.message);
-        console.error('Error fetching symbols:', error);
+      } catch (err) {
+        console.error('Error loading symbols:', err);
+        setError('Failed to connect to API');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchSymbols();
-  }, [currentSymbol]);
+    loadSymbols();
+  }, [apiBaseUrl, currentSymbol]);
 
-  // Handle symbol change
-  const handleSymbolChange = (symbol) => {
-    setCurrentSymbol(symbol);
+  const handleSymbolChange = (newSymbol) => {
+    setCurrentSymbol(newSymbol);
   };
 
   return (
@@ -61,18 +56,17 @@ function App() {
                 <Link to="/">Dashboard</Link>
               </li>
               <li>
+                <Link to="/backtest">Backtesting</Link>
+              </li>
+              <li>
                 <Link to="/portfolio">Portfolio</Link>
               </li>
               <li>
-                <Link to="/backtest">Backtest</Link>
-              </li>
-              <li>
-                <Link to="/optimize">Optimize</Link>
+                <Link to="/settings">Settings</Link>
               </li>
             </ul>
           </nav>
         </header>
-        
         <main className="App-main">
           {error && <div className="error-message">{error}</div>}
           
@@ -84,19 +78,19 @@ function App() {
                   symbols={symbols}
                   currentSymbol={currentSymbol}
                   onSymbolChange={handleSymbolChange}
-                  apiBaseUrl={API_BASE_URL}
+                  apiBaseUrl={apiBaseUrl}
                   isLoading={isLoading}
                 />
               } 
             />
-            <Route path="/portfolio" element={<div>Portfolio Page (Coming Soon)</div>} />
             <Route path="/backtest" element={<div>Backtest Page (Coming Soon)</div>} />
-            <Route path="/optimize" element={<div>Optimization Page (Coming Soon)</div>} />
+            <Route path="/portfolio" element={<div>Portfolio Page (Coming Soon)</div>} />
+            <Route path="/settings" element={<div>Settings Page (Coming Soon)</div>} />
           </Routes>
         </main>
-        
         <footer className="App-footer">
-          <p>&copy; {new Date().getFullYear()} Crypto Trading Platform</p>
+          <p>Crypto Trading Platform &copy; {new Date().getFullYear()}</p>
+          <p>Powered by FastAPI and React</p>
         </footer>
       </div>
     </Router>

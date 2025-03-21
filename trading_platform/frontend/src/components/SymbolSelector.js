@@ -1,17 +1,17 @@
 import React from 'react';
 
 function SymbolSelector({ symbols, currentSymbol, onSymbolChange, isLoading }) {
-  const handleSymbolChange = (e) => {
-    onSymbolChange(e.target.value);
+  const handleChange = (event) => {
+    const selectedSymbol = event.target.value;
+    onSymbolChange(selectedSymbol);
   };
 
   return (
     <div className="symbol-selector">
-      <label htmlFor="symbol-select">Select Cryptocurrency:</label>
-      <select
-        id="symbol-select"
-        value={currentSymbol}
-        onChange={handleSymbolChange}
+      <label>Symbol:</label>
+      <select 
+        value={currentSymbol} 
+        onChange={handleChange}
         disabled={isLoading}
       >
         {isLoading ? (
@@ -24,8 +24,9 @@ function SymbolSelector({ symbols, currentSymbol, onSymbolChange, isLoading }) {
           ))
         )}
       </select>
-      
-      {isLoading && <span className="loading-indicator-small"></span>}
+      {isLoading && (
+        <div className="loading-indicator-small"></div>
+      )}
     </div>
   );
 }

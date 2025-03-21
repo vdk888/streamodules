@@ -1,283 +1,206 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 
 function PriceChart({ priceData, signalsData, symbol, timeframe }) {
-  const svgRef = useRef();
-  const tooltipRef = useRef();
+  const chartRef = useRef(null);
+  const tooltipRef = useRef(null);
 
   useEffect(() => {
     if (!priceData || priceData.length === 0) return;
 
     // Clear previous chart
-    d3.select(svgRef.current).selectAll('*').remove();
+    d3.select(chartRef.current).selectAll('*').remove();
 
     // Setup dimensions
-    const margin = { top: 20, right: 50, bottom: 30, left: 50 };
-    const width = svgRef.current.clientWidth - margin.left - margin.right;
-    const height = 400 - margin.top - margin.bottom;
+    const width = chartRef.current.clientWidth;
+    const height = 400;
+    const margin = { top: 20, right: 30, bottom: 30, left: 60 };
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
 
     // Create SVG
-    const svg = d3
-      .select(svgRef.current)
-      .attr('width', width + margin.left + margin.right)
-      .attr('height', height + margin.top + margin.bottom)
-      .append('g')
+    const svg = d3.select(chartRef.current)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height);
+
+    // Create main group
+    const g = svg.append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
     // Parse dates
-    const parseDate = d3.timeParse('%Y-%m-%dT%H:%M:%S.%LZ');
+    const parseDate = d3.timeParse('%Y-%m-%dT%H:%M:%S');
+    const formatDate = d3.timeFormat('%b %d, %Y %H:%M');
+    
     const formattedData = priceData.map(d => ({
       ...d,
-      date: parseDate(d.timestamp) || new Date(d.timestamp)
+      date: parseDate(d.timestamp.split('.')[0]), // Remove milliseconds if present
+      open: +d.open,
+      high: +d.high,
+      low: +d.low,
+      close: +d.close,
+      volume: +d.volume
     }));
 
-    // Sort data by date
-    formattedData.sort((a, b) => a.date - b.date);
-
-    // Set up scales
-    const x = d3.scaleTime()
+    // X scale - time
+    const xScale = d3.scaleTime()
       .domain(d3.extent(formattedData, d => d.date))
-      .range([0, width]);
+      .range([0, innerWidth]);
 
-    const y = d3.scaleLinear()
+    // Y scale - price
+    const yScale = d3.scaleLinear()
       .domain([
-        d3.min(formattedData, d => d.low * 0.998),
-        d3.max(formattedData, d => d.high * 1.002)
+        d3.min(formattedData, d => d.low) * 0.99, 
+        d3.max(formattedData, d => d.high) * 1.01
       ])
-      .range([height, 0]);
+      .range([innerHeight, 0]);
 
-    // Format price with appropriate precision
-    const formatPrice = d3.format(',.2f');
+    // Add X axis
+    g.append('g')
+      .attr('class', 'x-axis')
+      .attr('transform', `translate(0,${innerHeight})`)
+      .call(d3.axisBottom(xScale)
+        .ticks(width > 700 ? 10 : 5)
+        .tickFormat(d3.timeFormat(timeframe === '1d' ? '%b %d' : '%b %d %H:%M')));
 
-    // Create line generator for price
-    const line = d3.line()
-      .x(d => x(d.date))
-      .y(d => y(d.close));
-
-    // Draw axes
-    const xAxis = svg.append('g')
-      .attr('transform', `translate(0,${height})`)
-      .call(d3.axisBottom(x).ticks(width / 100).tickFormat(date => {
-        const format = timeframe === '1d' ? '%Y-%m-%d' : '%m-%d %H:%M';
-        return d3.timeFormat(format)(date);
-      }));
-
-    const yAxis = svg.append('g')
-      .call(d3.axisLeft(y).tickFormat(d => `$${formatPrice(d)}`));
-
-    // Add X axis label
-    svg.append('text')
-      .attr('transform', `translate(${width / 2}, ${height + margin.top + 10})`)
-      .style('text-anchor', 'middle')
-      .text(`Time (${timeframe})`);
+    // Add Y axis
+    g.append('g')
+      .attr('class', 'y-axis')
+      .call(d3.axisLeft(yScale));
 
     // Add Y axis label
-    svg.append('text')
+    g.append('text')
+      .attr('class', 'y-axis-label')
       .attr('transform', 'rotate(-90)')
-      .attr('y', 0 - margin.left)
-      .attr('x', 0 - (height / 2))
+      .attr('y', -margin.left)
+      .attr('x', -innerHeight / 2)
       .attr('dy', '1em')
       .style('text-anchor', 'middle')
-      .text('Price (USD)');
+      .text('Price ($)');
 
-    // Draw price line
-    svg.append('path')
-      .datum(formattedData)
-      .attr('fill', 'none')
-      .attr('stroke', 'steelblue')
-      .attr('stroke-width', 1.5)
-      .attr('d', line);
+    // Add grid lines
+    g.append('g')
+      .attr('class', 'grid')
+      .call(d3.axisLeft(yScale)
+        .tickSize(-innerWidth)
+        .tickFormat(''));
 
-    // Create a hover effect with tooltip
-    const tooltip = d3.select(tooltipRef.current)
-      .style('opacity', 0)
-      .style('position', 'absolute')
-      .style('background-color', 'rgba(0, 0, 0, 0.8)')
-      .style('color', 'white')
-      .style('padding', '8px')
-      .style('border-radius', '4px')
-      .style('pointer-events', 'none');
+    // Candlestick chart
+    g.selectAll('.candle')
+      .data(formattedData)
+      .enter()
+      .append('g')
+      .attr('class', 'candle')
+      .each(function(d) {
+        const candle = d3.select(this);
+        
+        // Determine if it's an up or down day
+        const isUp = d.close >= d.open;
+        
+        // Draw the wick (high to low)
+        candle.append('line')
+          .attr('class', 'wick')
+          .attr('x1', xScale(d.date))
+          .attr('x2', xScale(d.date))
+          .attr('y1', yScale(d.high))
+          .attr('y2', yScale(d.low))
+          .attr('stroke', 'black')
+          .attr('stroke-width', 1);
+        
+        // Draw the body (open to close)
+        const candleWidth = Math.max(innerWidth / formattedData.length * 0.7, 1);
+        candle.append('rect')
+          .attr('class', isUp ? 'up-candle' : 'down-candle')
+          .attr('x', xScale(d.date) - candleWidth / 2)
+          .attr('y', yScale(Math.max(d.open, d.close)))
+          .attr('width', candleWidth)
+          .attr('height', Math.max(1, Math.abs(yScale(d.open) - yScale(d.close))))
+          .attr('fill', isUp ? '#28a745' : '#dc3545');
+      });
 
-    // Draw signals if available
+    // Process signals data if available
     if (signalsData && signalsData.length > 0) {
-      // Format signal data
       const formattedSignals = signalsData.map(d => ({
         ...d,
-        date: parseDate(d.timestamp) || new Date(d.timestamp)
+        date: parseDate(d.timestamp.split('.')[0]), // Remove milliseconds if present
+        price: +d.price
       }));
 
-      // Draw buy signals
-      svg.selectAll('.buy-signal')
+      // Add buy signals
+      g.selectAll('.buy-signal')
         .data(formattedSignals.filter(d => d.buy_signal))
         .enter()
-        .append('circle')
+        .append('path')
         .attr('class', 'buy-signal')
-        .attr('cx', d => x(d.date))
-        .attr('cy', d => y(d.price))
-        .attr('r', 5)
+        .attr('d', d3.symbol().type(d3.symbolTriangle).size(100))
+        .attr('transform', d => `translate(${xScale(d.date)},${yScale(d.price - d.price * 0.005)}) rotate(180)`)
         .attr('fill', 'green')
-        .attr('stroke', 'white')
-        .attr('stroke-width', 1)
-        .on('mouseover', (event, d) => {
-          tooltip.transition().duration(200).style('opacity', 0.9);
-          tooltip.html(`
-            <strong>Buy Signal</strong><br/>
-            Date: ${d.date.toLocaleString()}<br/>
-            Price: $${formatPrice(d.price)}<br/>
-            Indicator: ${(d.daily_composite).toFixed(4)}
-          `)
-            .style('left', (event.pageX + 10) + 'px')
-            .style('top', (event.pageY - 28) + 'px');
-        })
-        .on('mouseout', () => {
-          tooltip.transition().duration(500).style('opacity', 0);
-        });
+        .attr('stroke', 'darkgreen')
+        .attr('stroke-width', 1.5);
 
-      // Draw sell signals
-      svg.selectAll('.sell-signal')
+      // Add sell signals
+      g.selectAll('.sell-signal')
         .data(formattedSignals.filter(d => d.sell_signal))
         .enter()
-        .append('circle')
+        .append('path')
         .attr('class', 'sell-signal')
-        .attr('cx', d => x(d.date))
-        .attr('cy', d => y(d.price))
-        .attr('r', 5)
+        .attr('d', d3.symbol().type(d3.symbolTriangle).size(100))
+        .attr('transform', d => `translate(${xScale(d.date)},${yScale(d.price + d.price * 0.005)})`)
         .attr('fill', 'red')
-        .attr('stroke', 'white')
-        .attr('stroke-width', 1)
-        .on('mouseover', (event, d) => {
-          tooltip.transition().duration(200).style('opacity', 0.9);
-          tooltip.html(`
-            <strong>Sell Signal</strong><br/>
-            Date: ${d.date.toLocaleString()}<br/>
-            Price: $${formatPrice(d.price)}<br/>
-            Indicator: ${(d.daily_composite).toFixed(4)}
-          `)
-            .style('left', (event.pageX + 10) + 'px')
-            .style('top', (event.pageY - 28) + 'px');
-        })
-        .on('mouseout', () => {
-          tooltip.transition().duration(500).style('opacity', 0);
-        });
-
-      // Draw potential buy signals (smaller dots)
-      svg.selectAll('.potential-buy')
-        .data(formattedSignals.filter(d => d.potential_buy && !d.buy_signal))
-        .enter()
-        .append('circle')
-        .attr('class', 'potential-buy')
-        .attr('cx', d => x(d.date))
-        .attr('cy', d => y(d.price))
-        .attr('r', 3)
-        .attr('fill', 'rgba(0, 128, 0, 0.5)')
-        .attr('stroke', 'white')
-        .attr('stroke-width', 0.5);
-
-      // Draw potential sell signals (smaller dots)
-      svg.selectAll('.potential-sell')
-        .data(formattedSignals.filter(d => d.potential_sell && !d.sell_signal))
-        .enter()
-        .append('circle')
-        .attr('class', 'potential-sell')
-        .attr('cx', d => x(d.date))
-        .attr('cy', d => y(d.price))
-        .attr('r', 3)
-        .attr('fill', 'rgba(255, 0, 0, 0.5)')
-        .attr('stroke', 'white')
-        .attr('stroke-width', 0.5);
+        .attr('stroke', 'darkred')
+        .attr('stroke-width', 1.5);
     }
 
-    // Add hover overlay for price information
-    const bisectDate = d3.bisector(d => d.date).left;
-    
-    const overlay = svg.append('rect')
-      .attr('width', width)
-      .attr('height', height)
-      .style('fill', 'none')
-      .style('pointer-events', 'all')
-      .on('mousemove', function(event) {
-        const x0 = x.invert(d3.pointer(event)[0]);
-        const i = bisectDate(formattedData, x0, 1);
-        const d0 = formattedData[i - 1];
-        const d1 = formattedData[i];
-        if (!d0 || !d1) return;
+    // Add title
+    svg.append('text')
+      .attr('x', width / 2)
+      .attr('y', margin.top / 2)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '16px')
+      .style('font-weight', 'bold')
+      .text(`${symbol} - ${timeframe}`);
+
+    // Create tooltip
+    const tooltip = d3.select(tooltipRef.current)
+      .attr('class', 'tooltip')
+      .style('opacity', 0)
+      .style('position', 'absolute')
+      .style('background-color', 'white')
+      .style('border', '1px solid #ddd')
+      .style('border-radius', '4px')
+      .style('padding', '10px')
+      .style('pointer-events', 'none');
+
+    // Add mouseover behavior
+    g.selectAll('.candle')
+      .on('mouseover', function(event, d) {
+        tooltip.transition()
+          .duration(200)
+          .style('opacity', 0.9);
         
-        const d = x0 - d0.date > d1.date - x0 ? d1 : d0;
-        
-        tooltip.transition().duration(200).style('opacity', 0.9);
         tooltip.html(`
-          <strong>${symbol}</strong><br/>
-          Date: ${d.date.toLocaleString()}<br/>
-          Open: $${formatPrice(d.open)}<br/>
-          High: $${formatPrice(d.high)}<br/>
-          Low: $${formatPrice(d.low)}<br/>
-          Close: $${formatPrice(d.close)}<br/>
-          Volume: ${d3.format(',')(Math.round(d.volume))}
+          <strong>Date:</strong> ${formatDate(d.date)}<br>
+          <strong>Open:</strong> $${d.open.toFixed(2)}<br>
+          <strong>High:</strong> $${d.high.toFixed(2)}<br>
+          <strong>Low:</strong> $${d.low.toFixed(2)}<br>
+          <strong>Close:</strong> $${d.close.toFixed(2)}<br>
+          <strong>Volume:</strong> $${d.volume.toFixed(2)}
         `)
           .style('left', (event.pageX + 10) + 'px')
           .style('top', (event.pageY - 28) + 'px');
       })
-      .on('mouseout', () => {
-        tooltip.transition().duration(500).style('opacity', 0);
+      .on('mouseout', function() {
+        tooltip.transition()
+          .duration(500)
+          .style('opacity', 0);
       });
-
-    // Add chart title
-    svg.append('text')
-      .attr('x', width / 2)
-      .attr('y', 0 - (margin.top / 2))
-      .attr('text-anchor', 'middle')
-      .style('font-size', '16px')
-      .style('font-weight', 'bold')
-      .text(`${symbol} Price Chart (${timeframe})`);
-
-    // Add legend
-    const legend = svg.append('g')
-      .attr('transform', `translate(${width - 150}, 10)`);
-
-    // Price line legend
-    legend.append('line')
-      .attr('x1', 0)
-      .attr('y1', 0)
-      .attr('x2', 20)
-      .attr('y2', 0)
-      .attr('stroke', 'steelblue')
-      .attr('stroke-width', 1.5);
-
-    legend.append('text')
-      .attr('x', 25)
-      .attr('y', 4)
-      .text('Price');
-
-    // Buy signal legend
-    legend.append('circle')
-      .attr('cx', 10)
-      .attr('cy', 20)
-      .attr('r', 5)
-      .attr('fill', 'green');
-
-    legend.append('text')
-      .attr('x', 25)
-      .attr('y', 24)
-      .text('Buy Signal');
-
-    // Sell signal legend
-    legend.append('circle')
-      .attr('cx', 10)
-      .attr('cy', 40)
-      .attr('r', 5)
-      .attr('fill', 'red');
-
-    legend.append('text')
-      .attr('x', 25)
-      .attr('y', 44)
-      .text('Sell Signal');
 
   }, [priceData, signalsData, symbol, timeframe]);
 
   return (
     <div className="price-chart">
-      <svg ref={svgRef} width="100%" height="400"></svg>
-      <div ref={tooltipRef} className="tooltip"></div>
+      <div ref={chartRef} style={{ width: '100%', height: '100%' }}></div>
+      <div ref={tooltipRef}></div>
     </div>
   );
 }
