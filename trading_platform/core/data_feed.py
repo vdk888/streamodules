@@ -3,10 +3,11 @@ Data feed functionality for fetching and processing market data
 """
 import pandas as pd
 import yfinance as yf
-from datetime import datetime, timedelta
+from typing import Dict, List, Tuple, Optional, Any, Union
 import logging
-from typing import Dict, List, Tuple, Optional, Any
+import datetime
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from .config import default_interval_yahoo, get_max_days
 
@@ -29,40 +30,73 @@ def fetch_historical_data(symbol: str, interval: str = default_interval_yahoo, d
     Returns:
         DataFrame with OHLCV data
     """
-    # Convert crypto trading symbol to Yahoo Finance format if needed
-    if '/' in symbol:
-        # Extract the base currency (before the slash)
-        yf_symbol = symbol.split('/')[0] + '-' + symbol.split('/')[1]
+    # Validate inputs
+    valid_intervals = ['1m', '5m', '15m', '30m', '60m', '1h', '1d']
+    if interval not in valid_intervals:
+        logger.warning(f"Invalid interval: {interval}. Using default: {default_interval_yahoo}")
+        interval = default_interval_yahoo
+    
+    # Convert '1h' to '60m' for Yahoo Finance
+    if interval == '1h':
+        yf_interval = '60m'
     else:
-        yf_symbol = symbol
+        yf_interval = interval
+    
+    # Calculate period based on interval and days
+    max_days = get_max_days(interval)
+    if days > max_days:
+        logger.warning(f"Days requested ({days}) exceeds maximum for interval {interval} ({max_days}). Using maximum.")
+        days = max_days
     
     # Calculate start and end dates
-    end = datetime.now()
-    start = end - timedelta(days=days)
+    end_date = datetime.datetime.now()
+    start_date = end_date - datetime.timedelta(days=days)
     
-    # Try to fetch data with retries
-    max_retries = 3
-    for attempt in range(1, max_retries + 1):
-        try:
-            ticker = yf.Ticker(yf_symbol)
-            df = ticker.history(start=start, end=end, interval=interval)
-            
-            # Log successful data fetch
-            logger.info(f"Fetched {len(df)} bars of {interval} data for {symbol} ({yf_symbol})")
-            logger.info(f"Date range: {df.index[0] if not df.empty else start} to {df.index[-1] if not df.empty else end}")
-            
-            return df
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Attempt {attempt} failed: {error_msg}")
-            
-            # If we've reached max retries, raise the exception
-            if attempt == max_retries:
-                logger.error(f"Failed to fetch data for {symbol} ({yf_symbol}): {error_msg}")
-                raise Exception(f"Too Many Requests. Rate limited. Try after a while.")
-            
-            # Wait before retrying (exponential backoff)
-            time.sleep(attempt * 2)
+    # Convert dates to strings
+    start_str = start_date.strftime('%Y-%m-%d')
+    end_str = end_date.strftime('%Y-%m-%d')
+    
+    try:
+        # Prepare symbol for Yahoo Finance (replace / with -)
+        yf_symbol = symbol.replace('/', '-')
+        
+        # Fetch data from Yahoo Finance
+        data = yf.download(
+            tickers=yf_symbol,
+            start=start_str,
+            end=end_str,
+            interval=yf_interval,
+            auto_adjust=True
+        )
+        
+        # Clean and preprocess data
+        if data.empty:
+            logger.warning(f"No data retrieved for {symbol}")
+            return pd.DataFrame()
+        
+        # Rename columns to lowercase
+        data.columns = [col.lower() for col in data.columns]
+        
+        # Make sure we have all required columns
+        required_columns = ['open', 'high', 'low', 'close', 'volume']
+        for col in required_columns:
+            if col not in data.columns:
+                logger.warning(f"Missing column: {col} for {symbol}")
+                if col == 'volume':
+                    data['volume'] = 0
+                else:
+                    return pd.DataFrame()
+        
+        # Log data retrieved
+        logger.info(f"Fetched {len(data)} bars of {interval} data for {symbol} ({yf_symbol})")
+        if not data.empty:
+            logger.info(f"Date range: {data.index[0]} to {data.index[-1]}")
+        
+        return data
+        
+    except Exception as e:
+        logger.error(f"Error fetching data for {symbol}: {str(e)}")
+        return pd.DataFrame()
 
 def get_latest_data(symbol: str, interval: str = default_interval_yahoo, limit: Optional[int] = None) -> pd.DataFrame:
     """
@@ -76,12 +110,15 @@ def get_latest_data(symbol: str, interval: str = default_interval_yahoo, limit: 
     Returns:
         DataFrame with the most recent data points
     """
-    max_days = get_max_days(interval)
-    df = fetch_historical_data(symbol, interval, days=max_days)
+    # Fetch data
+    days = get_max_days(interval)
+    data = fetch_historical_data(symbol, interval, days)
     
-    if limit and len(df) > limit:
-        return df.tail(limit)
-    return df
+    # Return most recent data points if limit specified
+    if limit is not None and limit > 0 and limit < len(data):
+        return data.tail(limit)
+    else:
+        return data
 
 def is_market_open(symbol: str = 'BTC/USD') -> bool:
     """
@@ -93,12 +130,34 @@ def is_market_open(symbol: str = 'BTC/USD') -> bool:
     Returns:
         Boolean indicating if market is currently open
     """
-    # For crypto, market is always open
-    if symbol.endswith('/USD') or symbol.endswith('-USD'):
+    # For crypto markets, they're always open
+    if '/' in symbol and (symbol.startswith('BTC') or symbol.endswith('BTC') or
+                          symbol.startswith('ETH') or symbol.endswith('ETH') or
+                          'USD' in symbol):
         return True
     
-    # For stocks, check market hours (implementation omitted for brevity)
-    return False
+    # Get current time in UTC
+    now = datetime.datetime.utcnow()
+    current_hour = now.hour
+    current_day = now.weekday()
+    
+    # Check for stock market hours (simplified - assumes US market)
+    if '/' not in symbol:
+        # Check if weekend
+        if current_day >= 5:  # 5,6 = Saturday, Sunday
+            return False
+        
+        # Check if during market hours (9:30 AM - 4:00 PM EST, which is UTC-5)
+        # So in UTC: 14:30 - 21:00
+        if current_hour < 14 or current_hour >= 21:
+            return False
+        if current_hour == 14 and now.minute < 30:
+            return False
+            
+        return True
+    
+    # Default to open (could be refined with exchange-specific logic)
+    return True
 
 def fetch_and_process_data(symbol: str, timeframe: str, lookback_days: int) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
     """
@@ -113,32 +172,21 @@ def fetch_and_process_data(symbol: str, timeframe: str, lookback_days: int) -> T
         Tuple containing the processed DataFrame and error message (if any)
     """
     try:
-        # Map timeframe to yfinance interval
-        yf_interval = timeframe
+        # Fetch data from Yahoo Finance
+        data = fetch_historical_data(symbol, timeframe, lookback_days)
         
-        # Fetch data
-        df = fetch_historical_data(symbol, yf_interval, days=lookback_days)
+        # Check if data is empty
+        if data.empty:
+            return None, f"No data available for {symbol} with {timeframe} timeframe"
         
-        if df.empty:
-            return None, f"No data available for {symbol} with timeframe {timeframe}"
+        # Process data (additional preprocessing if needed)
+        # ...
         
-        # Process data
-        df = df.copy()
-        
-        # Add additional columns
-        df['returns'] = df['Close'].pct_change()
-        df['volatility'] = df['returns'].rolling(window=20).std()
-        
-        # Calculate volume-based indicators
-        if 'Volume' in df.columns:
-            df['volume_sma'] = df['Volume'].rolling(window=20).mean()
-        
-        return df, None
+        return data, None
         
     except Exception as e:
-        error_msg = f"Error fetching historical data for {symbol}: {str(e)}"
-        logger.error(error_msg)
-        return None, error_msg
+        logger.error(f"Error in fetch_and_process_data for {symbol}: {str(e)}")
+        return None, str(e)
 
 def get_available_symbols() -> List[str]:
     """
@@ -147,8 +195,11 @@ def get_available_symbols() -> List[str]:
     Returns:
         List of trading symbol strings
     """
-    from ..modules.crypto.config import TRADING_SYMBOLS
-    return list(TRADING_SYMBOLS.keys())
+    # For now, return a default list of popular crypto symbols
+    return [
+        'BTC/USD', 'ETH/USD', 'SOL/USD', 'AVAX/USD', 'DOT/USD',
+        'LINK/USD', 'DOGE/USD', 'AAVE/USD', 'UNI/USD', 'LTC/USD'
+    ]
 
 def get_symbol_info(symbol: str) -> Dict[str, Any]:
     """
@@ -160,12 +211,23 @@ def get_symbol_info(symbol: str) -> Dict[str, Any]:
     Returns:
         Dictionary with symbol information
     """
-    from ..modules.crypto.config import TRADING_SYMBOLS
+    # Basic implementation - could be expanded with more details
+    info = {
+        'symbol': symbol,
+        'name': symbol.split('/')[0],
+        'type': 'crypto' if '/' in symbol else 'stock',
+        'exchange': 'Coinbase' if '/' in symbol else 'NYSE/NASDAQ',
+        'market_hours': {
+            'open': True,  # Default to always open for crypto
+            'next_open': None,
+            'next_close': None
+        }
+    }
     
-    if symbol in TRADING_SYMBOLS:
-        return TRADING_SYMBOLS[symbol]
-    else:
-        return {"error": f"Symbol {symbol} not found"}
+    # Check if market is open
+    info['market_hours']['open'] = is_market_open(symbol)
+    
+    return info
 
 def fetch_multi_symbol_data(symbols: List[str], timeframe: str, lookback_days: int) -> Dict[str, pd.DataFrame]:
     """
@@ -181,9 +243,24 @@ def fetch_multi_symbol_data(symbols: List[str], timeframe: str, lookback_days: i
     """
     results = {}
     
-    for symbol in symbols:
-        df, error = fetch_and_process_data(symbol, timeframe, lookback_days)
-        if df is not None:
-            results[symbol] = df
+    # Use ThreadPoolExecutor for parallel fetching
+    with ThreadPoolExecutor(max_workers=min(10, len(symbols))) as executor:
+        # Create fetch tasks
+        future_to_symbol = {
+            executor.submit(fetch_historical_data, symbol, timeframe, lookback_days): symbol
+            for symbol in symbols
+        }
+        
+        # Process completed tasks
+        for future in future_to_symbol:
+            symbol = future_to_symbol[future]
+            try:
+                data = future.result()
+                if not data.empty:
+                    results[symbol] = data
+                else:
+                    logger.warning(f"Empty data for {symbol}")
+            except Exception as e:
+                logger.error(f"Error fetching data for {symbol}: {str(e)}")
     
     return results

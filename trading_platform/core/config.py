@@ -1,50 +1,50 @@
 """
 Core configuration settings for the trading platform
 """
-from typing import Dict, List, Any
+from typing import Dict, List, Optional, Any, Union
 
-# Time-related constants
-default_interval_yahoo = '1h'
-default_interval_weekly = '4h'
-default_backtest_interval = 15  # days
+# Default intervals and parameters
+default_interval_yahoo = '1h'  # Default Yahoo Finance interval
+default_lookback_days = 15     # Default number of days to look back
+default_backtest_interval = 15  # Default number of days for backtesting
 
 # Parameter grid for optimization
 param_grid = {
-    'rsi_length': [7, 14, 21],
+    'rsi_period': [7, 10, 14, 21],
     'macd_fast': [8, 12, 16],
-    'macd_slow': [21, 26, 30],
-    'stoch_k': [9, 14, 20],
+    'macd_slow': [20, 26, 30],
+    'macd_signal': [7, 9, 11],
+    'stoch_k': [9, 14, 21],
     'stoch_d': [3, 5, 7],
-    'volatility_window': [10, 20, 30]
+    'hurst_lags': [[2, 4, 8, 16], [4, 8, 16, 32], [8, 16, 32, 64]],
+    'volatility_window': [10, 15, 20, 30]
 }
 
-# Trading costs
-default_trading_costs = {
-    'trading_fee': 0.001,  # 0.1% per trade
-    'slippage': 0.001,     # 0.1% slippage
+# Timeframe to update interval mapping (in seconds)
+UPDATE_INTERVALS = {
+    '1m': 60,
+    '5m': 300,
+    '15m': 900,
+    '30m': 1800,
+    '1h': 3600,
+    '4h': 14400,
+    '1d': 86400
 }
 
-# Default risk parameters
-default_risk_parameters = {
-    'max_position_size': 0.25,  # Maximum position size as fraction of portfolio
-    'stop_loss': 0.05,          # Stop loss as fraction of entry price
-    'take_profit': 0.15,        # Take profit as fraction of entry price
-    'max_drawdown': 0.25,       # Maximum allowed drawdown
+# Max data days per interval
+MAX_DAYS = {
+    '1m': 1,
+    '5m': 5,
+    '15m': 7,
+    '30m': 14,
+    '1h': 30,
+    '4h': 60,
+    '1d': 365
 }
 
 def get_update_interval(timeframe: str) -> int:
     """Get the appropriate update interval in seconds for a given timeframe"""
-    intervals = {
-        '1m': 60,
-        '5m': 300,
-        '15m': 900,
-        '30m': 1800,
-        '1h': 3600,
-        '4h': 14400,
-        '1d': 86400,
-        '1w': 604800
-    }
-    return intervals.get(timeframe, 3600)  # Default to 1h if not found
+    return UPDATE_INTERVALS.get(timeframe, 3600)  # Default to 1 hour
 
 def get_max_days(interval: str) -> int:
     """
@@ -56,17 +56,7 @@ def get_max_days(interval: str) -> int:
     Returns:
         Maximum number of days
     """
-    interval_limits = {
-        '1m': 7,
-        '5m': 30,
-        '15m': 30,
-        '30m': 60,
-        '1h': 730,
-        '4h': 730,
-        '1d': 1825,
-        '1w': 1825
-    }
-    return interval_limits.get(interval, 30)  # Default to 30 days if not found
+    return MAX_DAYS.get(interval, 30)  # Default to 30 days
 
 def calculate_capital_multiplier(lookback_days=default_backtest_interval/2):
     """
@@ -78,6 +68,8 @@ def calculate_capital_multiplier(lookback_days=default_backtest_interval/2):
     Returns:
         float: Capital multiplier between 0.5 and 3.0
     """
-    # This would typically involve analyzing asset volatility, correlation, etc.
-    # For simplicity, we're returning a default value
+    # In a real implementation, this would analyze market conditions
+    # and adjust capital allocation accordingly
+    
+    # For now, return a default value
     return 1.0

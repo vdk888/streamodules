@@ -11,3 +11,15 @@ fastapi
 python-dotenv
 uvicorn
 websockets
+fastapi
+matplotlib
+numpy
+pandas
+pydantic
+python-dateutil
+python-dotenv
+python-multipart
+requests
+uvicorn
+websockets
+yfinance
