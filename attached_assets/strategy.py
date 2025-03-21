@@ -168,6 +168,24 @@ class TradingStrategy:
                 'bar_time': current_bar_time.floor(config.DEFAULT_INTERVAL)
             }
             
+            try:
+                # Get performance ranking for this symbol
+                from attached_assets.backtest_individual import calculate_performance_ranking
+                current_time = pd.Timestamp.now(tz=pytz.UTC)
+                perf_rankings = calculate_performance_ranking(None, current_time, lookback_days_param)
+                
+                if perf_rankings is not None and self.symbol in perf_rankings.index:
+                    # Get rank (0 to 1)
+                    analysis['rank'] = perf_rankings.loc[self.symbol, 'rank']
+                    analysis['performance'] = perf_rankings.loc[self.symbol, 'performance']
+                else:
+                    analysis['rank'] = None
+                    analysis['performance'] = None
+            except Exception as e:
+                logger.error(f"Error getting performance ranking: {str(e)}")
+                analysis['rank'] = None
+                analysis['performance'] = None
+            
             # Store the analysis for reference
             self._last_analysis = analysis.copy()
             

@@ -862,6 +862,8 @@ def split_into_sessions(data):
 
 def create_backtest_plot(backtest_result: dict) -> tuple:
     """Create visualization of backtest results"""
+    session_start_times = []
+
     data = backtest_result['data']
     signals = backtest_result['signals']
     daily_data = backtest_result['daily_data']
@@ -1053,40 +1055,36 @@ def create_backtest_plot(backtest_result: dict) -> tuple:
     ax3.xaxis.set_major_formatter(plt.FuncFormatter(format_date))
     plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha='right')
 
-    # Plot 4: Portfolio Value and Shares Owned
+    # Calculate percentage exposure
+    portfolio_value_total = sum(portfolio_value)
+    exposure_percent = (np.array(shares) * data['close'].values) / portfolio_value_total * 100
+
+    # Plot 4: Portfolio Value, Shares Owned and Percentage Exposure
     ax4 = plt.subplot(gs[3])
     ax4_shares = ax4.twinx()
+    ax4_exposure = ax4.twinx()
     
     # Ensure portfolio values match data length
     if len(portfolio_value) > len(data.index):
         portfolio_value = portfolio_value[:len(data.index)]
-    elif len(portfolio_value) < len(data.index):
-        portfolio_value = np.append(portfolio_value, [portfolio_value[-1]] * (len(data.index) - len(portfolio_value)))
-    
-    # Create DataFrame with both portfolio and shares data
-    portfolio_df = pd.DataFrame(
-        {
-            'value': portfolio_value,
-            'shares': shares[:len(portfolio_value)]
-        },
-        index=data.index)
     
     # Plot portfolio value
-    ax4.plot(portfolio_df.index,
-             portfolio_df['value'],
-             color='green',
-             label='Portfolio Value')
+    ax4.plot(data.index, portfolio_value, color='blue', label='Portfolio Value')
     
-    # Plot shares
-    ax4_shares.plot(portfolio_df.index,
-                    portfolio_df['shares'],
-                    color='blue',
-                    alpha=0.5,
-                    label='Shares')
+    # Plot shares owned
+    ax4_shares.plot(data.index, shares, color='green', alpha=0.5, label='Shares Owned')
     
-    ax4.set_title('Portfolio Value and Position Size')
+    # Plot percentage exposure
+    ax4_exposure.plot(data.index, exposure_percent, color='red', alpha=0.5, label='% Exposure')
+    
+    ax4.set_title('Portfolio Value, Shares Owned and Percentage Exposure')
     ax4.set_ylabel('Portfolio Value ($)')
     ax4_shares.set_ylabel('Shares Owned')
+    ax4_exposure.set_ylabel('Percentage Exposure (%)')
+    ax4_exposure.spines['right'].set_position(('outward', 60))
+    ax4.legend(loc='upper left')
+    ax4_shares.legend(loc='upper center')
+    ax4_exposure.legend(loc='upper right')
     ax4.grid(True, alpha=0.3)
     ax4.xaxis.set_major_formatter(plt.FuncFormatter(format_date))
     plt.setp(ax4.xaxis.get_majorticklabels(), rotation=45, ha='right')

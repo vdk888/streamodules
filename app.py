@@ -10,6 +10,7 @@ import json
 import pytz
 from datetime import timedelta
 
+
 # Add the attached_assets directory to sys.path
 sys.path.append('.')
 
@@ -82,45 +83,6 @@ with st.sidebar.expander("Portfolio Simulation", expanded=True):
     enable_simulation = st.checkbox("Enable Portfolio Simulation", value=True)
     initial_capital = st.number_input("Initial Capital ($)", value=100000, step=10000)
 
-    # Add button to run a backtest using the function from backtest_individual.py
-    if st.button("Run Full Backtest"):
-        with st.spinner("Running backtest simulation... This may take a minute..."):
-            try:
-                # Get parameter preference
-                use_best_params = st.session_state.get('use_best_params', True)
-                params = get_default_params() if not use_best_params else None
-                backtest_result = run_backtest(
-                    symbol=selected_symbol, 
-                    days=lookback_days,
-                    params=params,  # Pass default params if not using optimized ones
-                    is_simulating=True,
-                    lookback_days_param=lookback_days
-                )
-
-                if backtest_result:
-                    st.success(f"Backtest complete for {selected_symbol}!")
-
-                    # Display key performance metrics
-                    stats = backtest_result.get('stats', {})
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("Total Return", f"{stats.get('total_return', 0):.2f}%")
-                    with col2:
-                        st.metric("Max Drawdown", f"{stats.get('max_drawdown', 0):.2f}%")
-                    with col3:
-                        st.metric("Win Rate", f"{stats.get('win_rate', 0):.2f}%")
-                    with col4:
-                        st.metric("Sharpe Ratio", f"{stats.get('sharpe_ratio', 0):.2f}")
-
-                    # If there's a plot available in the result, display it
-                    plot_data = backtest_result.get('plot_data', None)
-                    if plot_data:
-                        st.plotly_chart(plot_data, use_container_width=True)
-                else:
-                    st.warning("Could not complete backtest. Try a different timeframe.")
-            except Exception as e:
-                st.error(f"Error during backtest: {str(e)}")
-                st.info("Check the logs for more details.")
 
 # Best parameters management
 with st.sidebar.expander("Parameter Management", expanded=True):
@@ -233,77 +195,283 @@ def load_best_params(symbol):
         st.warning(f"Error loading parameters: {str(e)}. Using defaults.")
         return None
 
+# Add these functions to your app.py
+def calculate_buy_percentage(rank: int, total_assets: int) -> float:
+    """
+    Calculate buy percentage based on rank and total number of assets.
+    rank: 1 is best performer, total_assets is worst performer
+    Returns: float between 0.0 and 0.5 representing buy percentage
+    """
+    # Calculate cutoff points
+    bottom_third = int(total_assets * (1 / 3))
+    top_two_thirds = total_assets - bottom_third
+
+    # If in bottom third, buy 0%
+    if rank > top_two_thirds:
+        return 0.0
+
+    # For top two-thirds, use inverted wave function
+    x = (rank - 1) / (top_two_thirds - 1) if top_two_thirds > 1 else 0
+    wave = 0.02 * np.sin(2 * np.pi * x)  # Smaller oscillation
+    linear = 0.48 - 0.48 * x  # Linear decrease from 0.48 to 0.0
+    return max(0.0, min(0.5, linear + wave))  # Clamp between 0.0 and 0.5
+
+def calculate_sell_percentage(rank: int, total_assets: int) -> float:
+    """
+    Calculate sell percentage based on rank and total number of assets.
+    rank: 1 is best performer, total_assets is worst performer
+    Returns: float between 0.1 and 1.0 representing sell percentage
+    """
+    # Calculate cutoff points
+    bottom_third = int(total_assets * (1 / 3))
+    top_two_thirds = total_assets - bottom_third
+
+    # If in bottom third, sell 100%
+    if rank > top_two_thirds:
+        return 1.0
+
+    # For top two-thirds, use a wave function
+    x = (rank - 1) / (top_two_thirds - 1) if top_two_thirds > 1 else 0
+    wave = 0.1 * np.sin(2 * np.pi * x)  # Oscillation between -0.1 and 0.1
+    linear = 0.3 + 0.7 * x  # Linear increase from 0.3 to 1.0
+    return max(0.1, min(1.0, linear + wave))  # Clamp between 0.1 and 1.0
+
 # Function to simulate portfolio based on signals
 def simulate_portfolio(signals_df, price_data, initial_capital=100000):
     """
-    Simulate portfolio performance based on trading signals
-
-    Args:
-        signals_df: DataFrame with trading signals
-        price_data: DataFrame with price data
-        initial_capital: Initial capital in USD
-
-    Returns:
-        DataFrame with portfolio performance
+    Simulate portfolio performance based on trading signals with performance ranking
     """
     if signals_df is None or signals_df.empty:
         return None
-
+    
+    # Get prices dataset for ranking calculation
+    prices_dataset = {}
+    for symbol, config in TRADING_SYMBOLS.items():
+        try:
+            from attached_assets.fetch import fetch_historical_data
+            data = fetch_historical_data(symbol, interval=timeframe, days=lookback_days)
+            if not data.empty:
+                prices_dataset[symbol] = data
+        except Exception as e:
+            st.warning(f"Error fetching data for {symbol}: {str(e)}")
+    
     # Initialize portfolio tracking
     position = 0  # Current position in shares
     cash = initial_capital
     portfolio_value = []  # Portfolio value over time
     shares_owned = []  # Shares owned over time
-
+    trades = []  # For tracking trades
+    
+    # Get trading costs based on market type
+    symbol_config = TRADING_SYMBOLS[selected_symbol]
+    market_type = symbol_config['market']
+    costs = TRADING_COSTS.get(market_type, TRADING_COSTS['DEFAULT'])
+    trading_fee = costs['trading_fee']
+    spread = costs['spread']
+    
     # For each row in the signals DataFrame
     for idx, row in signals_df.iterrows():
         signal = row.get('signal', 0)
         price = price_data.loc[idx, 'close'] if idx in price_data.index else 0
-
+        
         if price == 0:
             continue
-
+        
         # Process buy signal
         if signal == 1 and cash > 0:
-            # Calculate how many shares to buy (use 95% of available cash)
-            amount_to_use = cash * 0.95
-            shares_to_buy = amount_to_use / price
-
-            # Crypto can be fractional, stocks might need to be whole numbers
-            shares_to_buy = round(shares_to_buy, 8)
-
-            # Update position
-            position += shares_to_buy
-            cash -= shares_to_buy * price
-
-        # Process sell signal    
+            # Calculate performance ranking
+            perf_rankings = backtest_calculate_ranking(prices_dataset, idx, lookback_days)
+            
+            if perf_rankings is not None and selected_symbol in perf_rankings.index:
+                # Use the same formula from backtest_individual.py
+                rank = perf_rankings.loc[selected_symbol, 'rank']
+                performance = perf_rankings.loc[selected_symbol, 'performance']
+                
+                # Functions from backtest_individual.py (used directly)
+                
+                # Get total number of assets
+                total_assets = len(perf_rankings)
+                
+                # Calculate rank position (1 is best)
+                rank_position = 1 + sum(
+                    1 for other_metric in perf_rankings['rank'].values
+                    if other_metric > rank)
+                
+                # Calculate buy percentage
+                buy_percentage = calculate_buy_percentage(rank_position, total_assets)
+                
+                # Calculate position size
+                capital_to_use = initial_capital * buy_percentage
+                shares_to_buy = capital_to_use / price
+                
+                # Round based on market type
+                if symbol_config['market'] == 'CRYPTO':
+                    shares_to_buy = round(shares_to_buy, 8)
+                else:
+                    shares_to_buy = int(shares_to_buy)
+                
+                # Ensure minimum position size
+                min_qty = 1 if symbol_config['market'] != 'CRYPTO' else 0.0001
+                if shares_to_buy < min_qty:
+                    shares_to_buy = min_qty
+                
+                # Apply trading costs
+                cost = shares_to_buy * price
+                total_cost = cost * (1 + spread + trading_fee)
+                
+                if total_cost <= cash and shares_to_buy > 0:
+                    position += shares_to_buy
+                    cash -= total_cost
+                    trades.append({
+                        'time': idx,
+                        'type': 'buy',
+                        'price': price,
+                        'shares': shares_to_buy,
+                        'rank': rank,
+                        'buy_percentage': buy_percentage * 100
+                    })
+            else:
+                # If can't calculate ranking, use a conservative approach
+                shares_to_buy = (cash * 0.5) / price
+                if symbol_config['market'] == 'CRYPTO':
+                    shares_to_buy = round(shares_to_buy, 8)
+                else:
+                    shares_to_buy = int(shares_to_buy)
+                
+                cost = shares_to_buy * price
+                total_cost = cost * (1 + spread + trading_fee)
+                
+                if total_cost <= cash and shares_to_buy > 0:
+                    position += shares_to_buy
+                    cash -= total_cost
+                    trades.append({
+                        'time': idx,
+                        'type': 'buy',
+                        'price': price,
+                        'shares': shares_to_buy,
+                        'rank': 'N/A',
+                        'buy_percentage': 50
+                    })
+        
+        # Process sell signal
         elif signal == -1 and position > 0:
-            # Sell all shares
-            cash += position * price
-            position = 0
-
+            # Calculate performance ranking
+            perf_rankings = backtest_calculate_ranking(prices_dataset, idx, lookback_days)
+            
+            if perf_rankings is not None and selected_symbol in perf_rankings.index:
+                # Use the same formula from backtest_individual.py
+                rank = perf_rankings.loc[selected_symbol, 'rank']
+                performance = perf_rankings.loc[selected_symbol, 'performance']
+                
+                # Get total number of assets
+                total_assets = len(perf_rankings)
+                
+                # Calculate rank position (1 is best)
+                rank_position = 1 + sum(
+                    1 for other_metric in perf_rankings['rank'].values
+                    if other_metric > rank)
+                
+                # Calculate sell percentage
+                sell_percentage = calculate_sell_percentage(rank_position, total_assets)
+                
+                # Calculate shares to sell
+                shares_to_sell = position * sell_percentage
+                
+                # Round based on market type
+                if symbol_config['market'] == 'CRYPTO':
+                    shares_to_sell = round(shares_to_sell, 8)
+                else:
+                    shares_to_sell = int(shares_to_sell)
+                
+                if shares_to_sell > 0:
+                    # Calculate sale value with trading costs
+                    gross_sale_value = shares_to_sell * price
+                    trading_costs = gross_sale_value * (trading_fee + spread / 2)
+                    net_sale_value = gross_sale_value - trading_costs
+                    
+                    cash += net_sale_value
+                    position -= shares_to_sell
+                    trades.append({
+                        'time': idx,
+                        'type': 'sell',
+                        'price': price,
+                        'shares': shares_to_sell,
+                        'rank': rank,
+                        'sell_percentage': sell_percentage * 100
+                    })
+            else:
+                # Fallback to selling entire position
+                gross_sale_value = position * price
+                trading_costs = gross_sale_value * (trading_fee + spread / 2)
+                net_sale_value = gross_sale_value - trading_costs
+                
+                cash += net_sale_value
+                trades.append({
+                    'time': idx,
+                    'type': 'sell',
+                    'price': price,
+                    'shares': position,
+                    'rank': 'N/A',
+                    'sell_percentage': 100
+                })
+                position = 0
+        
         # Calculate portfolio value
         current_value = cash + (position * price)
         portfolio_value.append(current_value)
         shares_owned.append(position)
-
-    # Create a DataFrame for the portfolio history
+    
+    # Create DataFrame with portfolio history
     portfolio_df = pd.DataFrame({
         'portfolio_value': portfolio_value,
         'shares_owned': shares_owned
     }, index=signals_df.index)
-
+    
+    # Add trades info
+    portfolio_df['trades'] = None
+    for trade in trades:
+        trade_time = trade['time']
+        if trade_time in portfolio_df.index:
+            trade_type = "BUY" if trade['type'] == 'buy' else "SELL"
+            portfolio_df.at[trade_time, 'trades'] = f"{trade_type} {trade['shares']:.4f} @ ${trade['price']:.2f}"
+    
     return portfolio_df
 
-# Create placeholders for charts
-price_chart_placeholder = st.empty()
-indicators_placeholder = st.empty()
-signals_placeholder = st.empty()
-portfolio_placeholder = st.empty()
+def get_current_rankings(symbol, timestamp=None):
+    """
+    Get the most recent performance rankings at a given timestamp.
+    
+    Args:
+        symbol: The symbol to get rank for
+        timestamp: The timestamp to find the closest ranking data (default: current time)
+        
+    Returns:
+        rank: Performance rank (0-1) or None if not available
+    """
+    try:
+        # Calculate rankings for all symbols
+        performance_df = calculate_performance_ranking(lookback_days=lookback_days)
+        
+        if performance_df is not None and not performance_df.empty and symbol in performance_df.index:
+            # Return the rank for the specified symbol
+            return performance_df.loc[symbol, 'rank']
+        return None
+    except Exception as e:
+        print(f"Error getting rank data: {e}")
+        return None
 
-# Calculate performance ranking for assets
-def calculate_performance_ranking(prices_dataset=None, lookback_days=15):
-    """Calculate simple performance ranking across assets for display"""
+def calculate_performance_ranking(prices_dataset=None, timestamp=None, lookback_days=15):
+    """
+    Calculate performance ranking across assets for a specific point in time.
+    
+    Args:
+        prices_dataset: Dictionary of symbol -> DataFrame with price data
+        timestamp: The timestamp to calculate ranking for (if None, use latest data)
+        lookback_days: Number of days to look back for performance calculation
+    
+    Returns:
+        DataFrame with performance and rank data
+    """
     if prices_dataset is None:
         prices_dataset = {}
         # Fetch data for multiple assets
@@ -322,15 +490,35 @@ def calculate_performance_ranking(prices_dataset=None, lookback_days=15):
 
     # Calculate performance for each asset
     performance_dict = {}
+    
+    # If timestamp is provided, use it to filter data
+    if timestamp is not None:
+        # Calculate lookback start time
+        lookback_start = timestamp - pd.Timedelta(days=lookback_days)
+    
     for symbol, data in prices_dataset.items():
         try:
             if len(data) >= 2:
                 # Make column names lowercase if they aren't already
                 if data.columns[0].isupper():
                     data.columns = data.columns.str.lower()
-
-                start_price = data['close'].iloc[0]
-                end_price = data['close'].iloc[-1]
+                
+                # Filter data based on timestamp if provided
+                if timestamp is not None:
+                    # Get data up to timestamp and within lookback period
+                    symbol_data = data[(data.index <= timestamp) & (data.index >= lookback_start)]
+                    
+                    if len(symbol_data) >= 2:  # Need at least 2 points
+                        start_price = symbol_data['close'].iloc[0]
+                        end_price = symbol_data['close'].iloc[-1]
+                    else:
+                        # Not enough data for this period
+                        continue
+                else:
+                    # Use all data
+                    start_price = data['close'].iloc[0]
+                    end_price = data['close'].iloc[-1]
+                
                 performance = ((end_price - start_price) / start_price) * 100
                 performance_dict[symbol] = performance
         except Exception as e:
@@ -339,11 +527,73 @@ def calculate_performance_ranking(prices_dataset=None, lookback_days=15):
     # Convert to DataFrame and calculate rankings
     if performance_dict:
         perf_df = pd.DataFrame.from_dict(performance_dict, 
-                                        orient='index', 
-                                        columns=['performance'])
+                                         orient='index', 
+                                         columns=['performance'])
         perf_df['rank'] = perf_df['performance'].rank(method='dense', pct=True)
         return perf_df
     return None
+
+def get_historical_ranking(symbol, timestamp):
+    """
+    Get performance ranking for a specific symbol at a specific timestamp.
+    
+    Args:
+        symbol: The symbol to get rank for
+        timestamp: The timestamp to calculate ranking for
+    
+    Returns:
+        tuple: (rank, performance) or (None, None) if not available
+    """
+    try:
+        # Check if we have a cached result
+        cache_key = f"{symbol}_{timestamp.strftime('%Y%m%d%H%M')}"
+        if 'ranking_cache' not in st.session_state:
+            st.session_state.ranking_cache = {}
+        
+        if cache_key in st.session_state.ranking_cache:
+            return st.session_state.ranking_cache[cache_key]
+        
+        # Fetch data for multiple assets over a lookback period
+        prices_dataset = {}
+        lookback_days = 15  # Use a consistent lookback for historical calculations
+        lookback_start = timestamp - pd.Timedelta(days=lookback_days)
+        
+        for sym, config in TRADING_SYMBOLS.items():
+            try:
+                from attached_assets.fetch import fetch_historical_data
+                # Fetch enough data to cover the lookback period from the timestamp
+                fetch_days = lookback_days + 2  # Add buffer
+                data = fetch_historical_data(sym, interval=timeframe, days=fetch_days)
+                
+                if not data.empty:
+                    # Filter data to the relevant period
+                    filtered_data = data[(data.index <= timestamp) & (data.index >= lookback_start)]
+                    if len(filtered_data) >= 2:  # Need at least 2 points
+                        prices_dataset[sym] = filtered_data
+            except Exception as e:
+                print(f"Error fetching historical data for {sym}: {str(e)}")
+        
+        # Calculate performance ranking with the timestamp
+        performance_df = calculate_performance_ranking(prices_dataset, timestamp, lookback_days)
+        
+        if performance_df is not None and not performance_df.empty and symbol in performance_df.index:
+            rank = performance_df.loc[symbol, 'rank']
+            performance = performance_df.loc[symbol, 'performance']
+            
+            # Cache the result
+            st.session_state.ranking_cache[cache_key] = (rank, performance)
+            
+            return rank, performance
+        return None, None
+    except Exception as e:
+        print(f"Error getting historical ranking data: {e}")
+        return None, None
+
+# Create placeholders for charts
+price_chart_placeholder = st.empty()
+indicators_placeholder = st.empty()
+signals_placeholder = st.empty()
+portfolio_placeholder = st.empty()
 
 # Function to update the charts
 def update_charts():
@@ -717,26 +967,29 @@ def update_charts():
         # Get recent signals
         recent_signals = signals_df[signals_df['signal'] != 0].tail(5)
 
-    if not recent_signals.empty:
+        # Format the signals for display
+        signal_display = []
+        for idx, row in recent_signals.iterrows():
+            signal_type = "🟢 BUY" if row['signal'] == 1 else "🔴 SELL"
+            price = df.loc[idx, 'close']
+            daily_composite = row.get('daily_composite', 'N/A')
+            weekly_composite = row.get('weekly_composite', 'N/A')
+            
+            # Get the historical rank for this signal's timestamp
+            rank, performance = get_historical_ranking(selected_symbol, idx)
+            rank_display = f"{rank*100:.0f}%" if rank is not None else "N/A"
+            
+            signal_display.append({
+                "Time": idx.strftime("%Y-%m-%d %H:%M"),
+                "Signal": signal_type,
+                "Price": f"${price:.2f}",
+                "Rank": rank_display,
+                "Daily Composite": f"{daily_composite:.4f}" if isinstance(daily_composite, (int, float)) else daily_composite,
+                "Weekly Composite": f"{weekly_composite:.4f}" if isinstance(weekly_composite, (int, float)) else weekly_composite
+            })
+
         with signals_placeholder.container():
             st.subheader("Recent Signals")
-
-            # Format the signals for display
-            signal_display = []
-            for idx, row in recent_signals.iterrows():
-                signal_type = "🟢 BUY" if row['signal'] == 1 else "🔴 SELL"
-                price = df.loc[idx, 'close']
-                daily_composite = row.get('daily_composite', 'N/A')
-                weekly_composite = row.get('weekly_composite', 'N/A')
-
-                signal_display.append({
-                    "Time": idx.strftime("%Y-%m-%d %H:%M"),
-                    "Signal": signal_type,
-                    "Price": f"${price:.2f}",
-                    "Daily Composite": f"{daily_composite:.4f}" if isinstance(daily_composite, (int, float)) else daily_composite,
-                    "Weekly Composite": f"{weekly_composite:.4f}" if isinstance(weekly_composite, (int, float)) else weekly_composite
-                })
-
             st.table(pd.DataFrame(signal_display))
     else:
         signals_placeholder.info("No signals generated in the selected timeframe.")
