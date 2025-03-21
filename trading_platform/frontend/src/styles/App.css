@@ -1,0 +1,254 @@
+/* Base styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+  color: #333;
+  background-color: #f7f9fc;
+}
+
+.App {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Navigation */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background-color: #2c3e50;
+  color: white;
+}
+
+.logo a {
+  color: white;
+  text-decoration: none;
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.nav-links {
+  display: flex;
+  list-style: none;
+}
+
+.nav-links li {
+  margin-left: 1.5rem;
+}
+
+.nav-links a {
+  color: white;
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+.nav-links a:hover {
+  color: #3498db;
+}
+
+/* Main content */
+.main-content {
+  flex: 1;
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Footer */
+.footer {
+  background-color: #2c3e50;
+  color: white;
+  text-align: center;
+  padding: 1rem;
+  margin-top: auto;
+}
+
+/* Dashboard */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.dashboard-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.controls-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  background-color: white;
+  padding: 1rem;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.symbol-control, .timeframe-control, .lookback-control, .actions-control {
+  margin-right: 1rem;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.form-select, .form-input {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s ease;
+}
+
+.btn:hover {
+  background-color: #2980b9;
+}
+
+.btn:disabled {
+  background-color: #95a5a6;
+  cursor: not-allowed;
+}
+
+.chart-container {
+  background-color: white;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
+}
+
+.loading, .error-message {
+  text-align: center;
+  padding: 2rem;
+}
+
+.error-message {
+  color: #e74c3c;
+}
+
+/* Backtest Results */
+.backtest-section {
+  background-color: white;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.backtest-results h3 {
+  margin-bottom: 1rem;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.metric {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-radius: 5px;
+  text-align: center;
+}
+
+.metric-label {
+  font-size: 0.9rem;
+  color: #7f8c8d;
+  margin-bottom: 0.5rem;
+}
+
+.metric-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.positive {
+  color: #2ecc71;
+}
+
+.negative {
+  color: #e74c3c;
+}
+
+.trades-section h4 {
+  margin-bottom: 1rem;
+}
+
+.trades-table-container {
+  overflow-x: auto;
+}
+
+.trades-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.trades-table th, .trades-table td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.trades-table th {
+  background-color: #f2f2f2;
+  font-weight: 600;
+}
+
+.buy-row {
+  background-color: rgba(46, 204, 113, 0.1);
+}
+
+.sell-row {
+  background-color: rgba(231, 76, 60, 0.1);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .controls-section {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .symbol-control, .timeframe-control, .lookback-control, .actions-control {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 1rem;
+  }
+  
+  .navbar {
+    flex-direction: column;
+  }
+  
+  .nav-links {
+    margin-top: 1rem;
+  }
+  
+  .nav-links li {
+    margin-left: 1rem;
+    margin-right: 1rem;
+  }
+}
