@@ -3,8 +3,8 @@ import numpy as np
 import yfinance as yf
 from datetime import datetime, timedelta
 import pytz
-from attached_assets.indicators import generate_signals, get_default_params
-from attached_assets.config import TRADING_SYMBOLS, DEFAULT_INTERVAL, DEFAULT_INTERVAL_WEEKLY, default_interval_yahoo, default_backtest_interval, per_symbol_capital, PER_SYMBOL_CAPITAL_MULTIPLIER, TRADING_COSTS
+from indicators import generate_signals, get_default_params
+from config import TRADING_SYMBOLS, DEFAULT_INTERVAL, DEFAULT_INTERVAL_WEEKLY, default_interval_yahoo, default_backtest_interval, per_symbol_capital, PER_SYMBOL_CAPITAL_MULTIPLIER, TRADING_COSTS
 import matplotlib
 matplotlib.use('Agg')  # Use Agg backend - must be before importing pyplot
 import matplotlib.pyplot as plt
@@ -12,7 +12,7 @@ import io
 import matplotlib.dates as mdates
 from matplotlib.dates import HourLocator, num2date
 import json
-from attached_assets.backtest_individual import run_backtest as run_individual_backtest
+from backtest_individual import run_backtest as run_individual_backtest
 
 def is_market_hours(timestamp, market_hours):
     """Check if given timestamp is within market hours"""
