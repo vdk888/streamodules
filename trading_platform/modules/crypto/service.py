@@ -3,13 +3,17 @@ Cryptocurrency-specific service functions
 """
 import logging
 import pandas as pd
+import numpy as np
+import math
 from typing import List, Dict, Any, Optional, Tuple
 import time
 import traceback
+import json
 
 from trading_platform.core.data_feed import fetch_historical_data, fetch_and_process_data, fetch_multi_symbol_data, get_available_symbols
 from trading_platform.core.indicators import generate_signals, get_default_params
 from trading_platform.core.backtest import run_backtest, find_best_params, calculate_performance_ranking
+from trading_platform.utils import clean_for_json, CustomJSONEncoder
 
 from .config import (
     DEFAULT_SYMBOL,

@@ -58,7 +58,22 @@ def fetch_historical_data(symbol: str, interval: str = default_interval_yahoo, d
     
     try:
         # Prepare symbol for Yahoo Finance (replace / with -)
-        yf_symbol = symbol.replace('/', '-')
+        if isinstance(symbol, str):
+            # For crypto, use standard format for Yahoo Finance
+            if '/' in symbol:
+                base, quote = symbol.split('/')
+                if quote == 'USD':
+                    yf_symbol = f"{base}-USD"  # BTC/USD becomes BTC-USD
+                else:
+                    yf_symbol = f"{base}-{quote}"  # ETH/BTC becomes ETH-BTC
+            else:
+                # Non-crypto symbol, pass as is
+                yf_symbol = symbol
+                
+            logger.info(f"Fetching data for symbol: {symbol}, Yahoo Finance symbol: {yf_symbol}")
+        else:
+            logger.error(f"Invalid symbol type: {type(symbol)}. Expected string.")
+            return pd.DataFrame()
         
         # Fetch data from Yahoo Finance
         data = yf.download(
@@ -66,16 +81,34 @@ def fetch_historical_data(symbol: str, interval: str = default_interval_yahoo, d
             start=start_str,
             end=end_str,
             interval=yf_interval,
-            auto_adjust=True
+            auto_adjust=True,
+            progress=False  # Disable progress bar
         )
         
         # Clean and preprocess data
-        if data.empty:
+        if data is None or data.empty:
             logger.warning(f"No data retrieved for {symbol}")
             return pd.DataFrame()
         
+        # Log the data type and structure
+        logger.info(f"Data type: {type(data)}, shape: {data.shape}")
+        logger.info(f"Data columns: {data.columns}")
+        
+        # Check if we have a Series instead of a DataFrame (single column)
+        if isinstance(data, pd.Series):
+            # Convert Series to DataFrame
+            data = data.to_frame()
+            logger.info(f"Converted Series to DataFrame with shape: {data.shape}")
+        
+        # Handle the case when columns are tuples (multi-level columns)
+        if isinstance(data.columns, pd.MultiIndex):
+            # For MultiIndex columns, extract the price type (Open, High, Low, Close, Volume)
+            data.columns = [col[0] for col in data.columns]
+            logger.info(f"Extracted price columns from multi-level index: {data.columns}")
+        
         # Rename columns to lowercase
-        data.columns = [col.lower() for col in data.columns]
+        data.columns = [str(col).lower() for col in data.columns]
+        logger.info(f"Final columns after conversion: {data.columns}")
         
         # Make sure we have all required columns
         required_columns = ['open', 'high', 'low', 'close', 'volume']
@@ -95,7 +128,9 @@ def fetch_historical_data(symbol: str, interval: str = default_interval_yahoo, d
         return data
         
     except Exception as e:
+        import traceback
         logger.error(f"Error fetching data for {symbol}: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return pd.DataFrame()
 
 def get_latest_data(symbol: str, interval: str = default_interval_yahoo, limit: Optional[int] = None) -> pd.DataFrame:
@@ -172,20 +207,50 @@ def fetch_and_process_data(symbol: str, timeframe: str, lookback_days: int) -> T
         Tuple containing the processed DataFrame and error message (if any)
     """
     try:
+        # Log the request parameters
+        logger.info(f"Fetching data for {symbol} with timeframe {timeframe} for {lookback_days} days")
+        
+        # For signal generation, we need at least 50 data points
+        # Adjust lookback_days if necessary based on timeframe
+        min_bars_needed = 50
+        adjusted_lookback_days = lookback_days
+        
+        if timeframe == '1d':
+            # For daily data, we need more days to get enough bars
+            adjusted_lookback_days = max(lookback_days, min_bars_needed + 10)  # Add buffer
+        elif timeframe == '4h':
+            # For 4-hour data, we need at least 10 days for 50+ bars
+            adjusted_lookback_days = max(lookback_days, 15)
+        elif timeframe == '1h':
+            # For hourly data, 5 days should give us 100+ bars
+            adjusted_lookback_days = max(lookback_days, 7)
+            
+        logger.info(f"Adjusted lookback days to {adjusted_lookback_days} to ensure sufficient data points")
+        
         # Fetch data from Yahoo Finance
-        data = fetch_historical_data(symbol, timeframe, lookback_days)
+        data = fetch_historical_data(symbol, timeframe, adjusted_lookback_days)
         
         # Check if data is empty
         if data.empty:
+            logger.warning(f"Empty data returned for {symbol}")
             return None, f"No data available for {symbol} with {timeframe} timeframe"
+        
+        # Check if we have enough data points for signal generation
+        if len(data) < min_bars_needed:
+            logger.warning(f"Insufficient data points for {symbol}: {len(data)} < {min_bars_needed}")
+            return None, f"Insufficient data points for signal generation ({len(data)} < {min_bars_needed})"
         
         # Process data (additional preprocessing if needed)
         # ...
         
+        # Log success
+        logger.info(f"Successfully fetched and processed data for {symbol}: {len(data)} bars")
         return data, None
         
     except Exception as e:
+        import traceback
         logger.error(f"Error in fetch_and_process_data for {symbol}: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return None, str(e)
 
 def get_available_symbols() -> List[str]:
